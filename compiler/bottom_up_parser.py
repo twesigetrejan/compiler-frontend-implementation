@@ -34,6 +34,7 @@ class BottomUpParser:
         self.index   = 0
         self.stack: list[Symbol] = []
         self.steps: list[str] = []
+        self.decisions: list[dict] = []  # Structured shift/reduce decisions
         self._step_n = 0
 
     def parse(self) -> Program:
@@ -66,12 +67,47 @@ class BottomUpParser:
             f"  |  stack: [{stack_summary}]"
             f"  |  remaining: {remaining or ['$']}"
         )
+        
+        # Record decision: find the last operator on stack (if any) for context
+        stack_op = None
+        for sym in reversed(self.stack):
+            if sym.token.type in _BINARY_OPS:
+                stack_op = sym.token.value
+                break
+        
+        self.decisions.append({
+            "type": "SHIFT",
+            "stack_op": stack_op,
+            "lookahead": tok.value,
+            "token_type": tok.type.name,
+            "reason": "First token" if not stack_op else f"Shift {tok.value} (will compare precedence)",
+        })
+        
         self.stack.append(Symbol(tok.type.name, tok, tok))
         self.index += 1
 
     def _log_reduce(self, pattern: str, result: str) -> None:
         self._step_n += 1
         self.steps.append(f"Step {self._step_n}:  REDUCE  {pattern}  ->  {result}")
+        
+        # Extract operator from pattern if present
+        op = None
+        if "EXPR '" in pattern:
+            # Pattern like "EXPR '+' EXPR"
+            parts = pattern.split("'")
+            if len(parts) >= 2:
+                op = parts[1]
+        
+        lookahead = self._lookahead().value if not self._at_end() else "$"
+        
+        self.decisions.append({
+            "type": "REDUCE",
+            "stack_op": op,
+            "lookahead": lookahead,
+            "pattern": pattern,
+            "result": result,
+            "reason": f"Reduce {op}" if op else "Reduce literal/group",
+        })
 
     def _reduce_all(self, lookahead: Token) -> None:
         while self._try_reduce(lookahead):
@@ -146,6 +182,22 @@ class BottomUpParser:
         if not self._should_reduce(op_type, lookahead.type):
             return False
         op_val = op_sym.token.value
+        
+        # Record the precedence comparison that led to this decision
+        stack_prec = PRECEDENCE.get(op_type, 0)
+        look_prec = PRECEDENCE.get(lookahead.type, 0)
+        look_val = lookahead.value if lookahead.type != TokenType.EOF else "$"
+        
+        self.decisions.append({
+            "type": "PRECISION_CHECK",
+            "stack_op": op_val,
+            "lookahead": look_val,
+            "stack_prec": stack_prec,
+            "look_prec": look_prec,
+            "decision": "REDUCE" if stack_prec >= look_prec else "SHIFT",
+            "reason": f"{op_val}(prec={stack_prec}) {'>=' if stack_prec >= look_prec else '<'} {look_val}(prec={look_prec}) → Reduce",
+        })
+        
         self.stack[-3:] = [Symbol(
             "EXPR",
             BinOp(left_sym.value, op_val, right_sym.value),

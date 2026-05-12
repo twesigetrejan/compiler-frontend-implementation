@@ -240,7 +240,15 @@ def _src(node: ASTNode) -> str:
 # Step 5 — assemble the full HTML page
 # ══════════════════════════════════════════════════════════════
 
-def _generate_html(program: Program, source: str, parser_name: str) -> str:
+def _generate_html(
+    program: Program,
+    source: str,
+    parser_name: str,
+    parser_steps: list[str] | None = None,
+    parser_decisions: list[dict] | None = None,
+    ll1_decisions: list[dict] | None = None,
+    token_analysis: list[dict] | None = None,
+) -> str:
     cards: list[str] = []
     for i, stmt in enumerate(program.statements):
         svg_str, _w, _h = _stmt_svg(stmt, svg_id=str(i))
@@ -255,6 +263,39 @@ def _generate_html(program: Program, source: str, parser_name: str) -> str:
 
     # Escape source for HTML display
     source_html = source.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    
+    # Generate theory tables section (for bottom-up parser)
+    theory_section = ""
+    if parser_decisions is not None:
+        from compiler.grammar_tables import render_dynamic_sr_table_html
+        theory_section = (
+            '<div class="theory-section">'
+            '<h2>Shift-Reduce Decisions</h2>'
+            f'{render_dynamic_sr_table_html(parser_decisions)}'
+            '</div>'
+        )
+    
+    # Generate LL(1) trace section (for top-down parser)
+    ll1_section = ""
+    if ll1_decisions is not None:
+        from compiler.grammar_tables import render_ll1_trace_html
+        ll1_section = (
+            '<div class="theory-section">'
+            '<h2>LL(1) Parsing Trace (Table Lookups)</h2>'
+            f'{render_ll1_trace_html(ll1_decisions)}'
+            '</div>'
+        )
+    
+    # Generate per-token FIRST/FOLLOW analysis section
+    token_section = ""
+    if token_analysis is not None:
+        from compiler.grammar_tables import render_token_first_follow_html
+        token_section = (
+            '<div class="theory-section">'
+            '<h2>FIRST/FOLLOW Sets for THIS Expression</h2>'
+            f'{render_token_first_follow_html(token_analysis)}'
+            '</div>'
+        )
 
     return f'''<!DOCTYPE html>
 <html lang="en">
@@ -335,6 +376,206 @@ def _generate_html(program: Program, source: str, parser_name: str) -> str:
     font-weight: 500;
   }}
 
+  /* ── Theory Section ── */
+  .theory-section {{
+    padding: 0 36px 28px;
+    max-width: 900px;
+  }}
+  .theory-section h2 {{
+    font-size: 16px;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin-bottom: 14px;
+  }}
+  .sub-section-title {{
+    font-size: 14px;
+    font-weight: 600;
+    color: #444;
+    margin-top: 20px;
+    margin-bottom: 8px;
+  }}
+
+  /* ── Tables ── */
+  .theory-tbl {{
+    border-collapse: collapse;
+    border: 1px solid #d0d0d0;
+    background: #fff;
+    box-shadow: 0 1px 6px rgba(0,0,0,.06);
+    border-radius: 6px;
+    overflow: hidden;
+    width: 100%;
+    margin-bottom: 16px;
+  }}
+  .theory-tbl caption {{
+    font-weight: 600;
+    padding: 8px 0;
+    font-size: 14px;
+  }}
+  .theory-tbl th {{
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 12px;
+    border: 1px solid #1a1a2e;
+  }}
+  .theory-tbl td {{
+    padding: 7px 12px;
+    font-size: 13px;
+    border: 1px solid #d0d0d0;
+    text-align: center;
+  }}
+  .theory-tbl .nt {{
+    color: #c0392b;
+    font-weight: 700;
+  }}
+  .theory-tbl .prod {{
+    color: #2d8a6a;
+    font-weight: 600;
+  }}
+  .theory-tbl .set-cell {{
+    font-family: "Courier New", monospace;
+    font-size: 12px;
+    text-align: left;
+  }}
+  .theory-tbl .empty-cell {{
+    background: #f9f9f9;
+  }}
+  .theory-tbl .ll1-entry {{
+    font-size: 12px;
+    text-align: left;
+  }}
+
+  /* Shift-Reduce cells */
+  .sr-shift {{
+    background: #d6f0ff;
+    color: #005f73;
+    font-weight: 700;
+  }}
+  .sr-reduce {{
+    background: #ffe0d0;
+    color: #9b2226;
+    font-weight: 700;
+  }}
+  .sr-shift-tag {{
+    background: #d6f0ff;
+    color: #005f73;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 700;
+  }}
+  .sr-reduce-tag {{
+    background: #ffe0d0;
+    color: #9b2226;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 700;
+  }}
+  .tbl-note {{
+    font-size: 12px;
+    color: #666;
+    margin-top: 8px;
+  }}
+
+  /* Trace table */
+  .sr-trace-table {{
+    border-collapse: collapse;
+    border: 1px solid #d0d0d0;
+    background: #fff;
+    box-shadow: 0 1px 6px rgba(0,0,0,.06);
+    border-radius: 6px;
+    overflow: hidden;
+    width: 100%;
+  }}
+  .sr-trace-table .step-num {{
+    font-weight: 700;
+    color: #1a1a2e;
+    width: 50px;
+  }}
+  .sr-trace-table .reason-cell {{
+    text-align: left;
+    font-family: "Courier New", monospace;
+    font-size: 12px;
+  }}
+  .sr-trace-table span.sr-shift {{
+    background: #d6f0ff;
+    color: #005f73;
+    padding: 2px 10px;
+    border-radius: 4px;
+    font-weight: 700;
+  }}
+  .sr-trace-table span.sr-reduce {{
+    background: #ffe0d0;
+    color: #9b2226;
+    padding: 2px 10px;
+    border-radius: 4px;
+    font-weight: 700;
+  }}
+
+  /* LL(1) Trace table */
+  .ll1-trace-table {{
+    border-collapse: collapse;
+    border: 1px solid #d0d0d0;
+    background: #fff;
+    box-shadow: 0 1px 6px rgba(0,0,0,.06);
+    border-radius: 6px;
+    overflow: hidden;
+    width: 100%;
+  }}
+  .ll1-trace-table .step-num {{
+    font-weight: 700;
+    color: #1a1a2e;
+    width: 50px;
+  }}
+  .ll1-trace-table .reason-cell {{
+    text-align: left;
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+  }}
+  .ll1-trace-table .epsilon-row {{
+    background: #f0f0f0;
+  }}
+  .ll1-trace-table .epsilon-row td {{
+    font-style: italic;
+    color: #888;
+  }}
+
+  /* Token FIRST/FOLLOW table */
+  .token-first-follow-table {{
+    border-collapse: collapse;
+    border: 1px solid #d0d0d0;
+    background: #fff;
+    box-shadow: 0 1px 6px rgba(0,0,0,.06);
+    border-radius: 6px;
+    overflow: hidden;
+    width: 100%;
+  }}
+  .token-first-follow-table .step-num {{
+    font-weight: 700;
+    color: #1a1a2e;
+    width: 50px;
+  }}
+  .token-first-follow-table .token-val {{
+    background: #f0f8ff;
+    color: #c0392b;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 3px;
+  }}
+  .token-first-follow-table .token-type {{
+    color: #888;
+    font-size: 11px;
+    font-family: "Courier New", monospace;
+  }}
+  .token-first-follow-table .prod-cell {{
+    text-align: left;
+    font-size: 11px;
+  }}
+  .token-first-follow-table .none {{
+    color: #ccc;
+    font-style: italic;
+  }}
+
   /* ── Legend ── */
   .legend {{
     padding: 0 36px 28px;
@@ -374,6 +615,10 @@ def _generate_html(program: Program, source: str, parser_name: str) -> str:
 <div class="container">
   {"".join(cards)}
 </div>
+
+{token_section}
+{ll1_section}
+{theory_section}
 
 <div class="legend">
   <div class="legend-item">
@@ -415,14 +660,30 @@ def visualize_source(
         raise ValueError(f"Lexer errors — cannot visualize:\n" +
                          "\n".join(str(e) for e in lex_errors))
 
-    if use_bottom_up:
-        program     = BottomUpParser(tokens).parse()
-        parser_name = "Shift-Reduce &nbsp;(bottom-up, operator-precedence)"
-    else:
-        program     = Parser(tokens).parse()
-        parser_name = "Recursive Descent &nbsp;(top-down, LL(1))"
+    # Generate per-token FIRST/FOLLOW analysis for THIS expression
+    from compiler.grammar_tables import analyze_expression_tokens
+    token_analysis = analyze_expression_tokens(tokens)
 
-    html = _generate_html(program, source, parser_name)
+    if use_bottom_up:
+        parser = BottomUpParser(tokens)
+        program = parser.parse()
+        parser_name = "Shift-Reduce  (bottom-up, operator-precedence)"
+        parser_decisions = parser.decisions
+        ll1_decisions = None  # Bottom-up doesn't use LL(1) table
+    else:
+        parser = Parser(tokens)
+        program = parser.parse()
+        parser_name = "Recursive Descent  (top-down, LL(1))"
+        parser_decisions = None  # Top-down doesn't have shift-reduce decisions
+        ll1_decisions = parser.ll1_decisions
+
+    html = _generate_html(
+        program, source, parser_name,
+        parser_steps=parser.steps,
+        parser_decisions=parser_decisions,
+        ll1_decisions=ll1_decisions,
+        token_analysis=token_analysis,
+    )
 
     if out_path is None:
         out_path = Path("ast_visual.html")
