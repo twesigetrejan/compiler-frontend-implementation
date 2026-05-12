@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 # main.py
 # ─────────────────────────────────────────────────────────────
 # Front-End Compiler — entry point
@@ -14,6 +15,10 @@
 #   # Compile with the bottom-up (shift-reduce) parser:
 #   python main.py --bottom-up "x = 3 + 5 * 2"
 #
+#   # Generate a graphical AST visualization (saves ast_visual.html):
+#   python main.py --visual "3 + 5 * 2"
+#   python main.py --visual --bottom-up "x = 10; y = x + 5"
+#
 #   # Compile a .expr file:
 #   python main.py examples/sample.expr
 # ─────────────────────────────────────────────────────────────
@@ -25,10 +30,12 @@ from pathlib import Path
 
 from compiler.pipeline import compile_source
 
+_BAR  = "=" * 64
+
 
 # ─────────────────────────────────────────────────────────────
 # Built-in test suite
-# Each tuple: (description, source, expect_error_in_phase)
+# Each tuple: (description, source)
 # ─────────────────────────────────────────────────────────────
 TEST_CASES: list[tuple[str, str]] = [
     # ── Valid inputs ──────────────────────────────────────
@@ -52,9 +59,58 @@ TEST_CASES: list[tuple[str, str]] = [
 ]
 
 
+# ─────────────────────────────────────────────────────────────
+# Visual helper
+# ─────────────────────────────────────────────────────────────
+
+def _do_visual(source: str, use_bottom_up: bool) -> None:
+    """Generate an HTML AST visualization and print comprehensive output."""
+    from compiler.visualizer import visualize_source
+    try:
+        saved = visualize_source(source, use_bottom_up=use_bottom_up)
+        parser_name = (
+            "Shift-Reduce  (bottom-up, operator-precedence)"
+            if use_bottom_up else
+            "Recursive Descent  (top-down, LL(1))"
+        )
+        
+        print()
+        print(_BAR)
+        print("  VISUALIZATION GENERATED")
+        print(_BAR)
+        print(f"  Input    : {source!r}")
+        print(f"  Parser   : {parser_name}")
+        print(f"  Output   : {saved.name}")
+        print(f"  Location : {saved.resolve()}")
+        print()
+        print("  Open the HTML file in your web browser to view:")
+        print("    • Lexical Analysis  (tokens)")
+        print("    • Syntax Analysis   (AST)")
+        print("    • Semantic Analysis (symbol table, evaluation results)")
+        print("    • Visual AST        (graphical representation)")
+        print(_BAR)
+        print()
+    except Exception as exc:
+        print()
+        print(_BAR)
+        print("  VISUALIZATION FAILED")
+        print(_BAR)
+        print(f"  Error: {exc}")
+        print(_BAR)
+        print()
+
+
 def main(argv: list[str]) -> int:
     use_bottom_up = "--bottom-up" in argv
+    use_visual = "--visual" in argv
     args = [a for a in argv[1:] if not a.startswith("--")]
+
+    if use_visual:
+        if not args:
+            print(f"  Error: --visual requires an input expression")
+            return 1
+        _do_visual(args[0], use_bottom_up)
+        return 0
 
     if args:
         raw = args[0]
@@ -78,11 +134,11 @@ def main(argv: list[str]) -> int:
         print(f"  PARSER MODE: {label}")
         print("*" * 64)
         for description, source in TEST_CASES:
-            print(f"\n  ▶  {description}")
+            print(f"\n  ► {description}")
             compile_source(source, use_bottom_up=parser_flag)
 
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv))   # pattern from reference impl.
+    raise SystemExit(main(sys.argv))
