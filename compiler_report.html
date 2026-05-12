@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Front-End Compiler -- Full Report</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  background:#edf0f4;color:#222;min-height:100vh}
+
+.banner{background:#12122a;color:#ccc;padding:24px 40px 20px}
+.banner h1{font-size:22px;color:#fff;margin-bottom:6px}
+.banner .sub{font-size:13px;color:#888;line-height:1.8}
+.banner code{background:#1e1e40;color:#a0c0ff;padding:2px 8px;border-radius:4px;font-size:13px}
+
+.re-bar{background:#1c1c38;padding:12px 40px;font-size:12.5px;color:#9ab;
+  display:flex;gap:32px;flex-wrap:wrap}
+.re-bar span{color:#cce;font-family:monospace}
+
+.tab-bar{display:flex;gap:4px;padding:20px 40px 0;border-bottom:2px solid #d0d6df}
+.tab-btn{padding:10px 28px;border:none;border-radius:8px 8px 0 0;font-size:14px;
+  font-weight:600;cursor:pointer;background:#d4dae4;color:#555;transition:background .15s}
+.tab-btn.active{background:#fff;color:#12122a;border-bottom:2px solid #fff;margin-bottom:-2px}
+
+.tab-pane{display:none;padding:28px 40px 40px}
+.tab-pane.active{display:block}
+
+/* Summary */
+.summary{display:flex;gap:20px;margin-bottom:24px;flex-wrap:wrap}
+.summary-box{background:#fff;border-radius:10px;padding:12px 20px;
+  box-shadow:0 1px 5px rgba(0,0,0,.07);display:flex;flex-direction:column;gap:2px}
+.summary-box .s-num{font-size:26px;font-weight:700}
+.summary-box .s-lbl{font-size:12px;color:#777}
+.s-green{color:#1a6630}.s-red{color:#8a1500}.s-blue{color:#1a4080}
+
+/* Theory tables section */
+.theory-section{background:#fff;border-radius:12px;padding:24px 28px;
+  margin-bottom:28px;box-shadow:0 1px 6px rgba(0,0,0,.08)}
+.theory-title{font-size:16px;font-weight:700;color:#12122a;
+  margin:20px 0 10px;padding-bottom:6px;border-bottom:2px solid #e8eaee}
+.theory-title:first-child{margin-top:0}
+.theory-note{font-size:13px;color:#666;margin-bottom:10px;line-height:1.6}
+.tbl-scroll{overflow-x:auto}
+
+/* theory-tbl (shared by all theory tables) */
+.theory-tbl{border-collapse:collapse;font-size:13px;width:100%;margin-bottom:4px}
+.theory-tbl th{background:#f2f4f7;padding:7px 12px;text-align:left;
+  font-weight:700;color:#444;border:1px solid #dde;white-space:nowrap}
+.theory-tbl td{padding:6px 12px;border:1px solid #e8eaee;vertical-align:top}
+.theory-tbl .empty-cell{color:#ccc;background:#fafafa}
+.theory-tbl .ll1-entry{font-size:12px}
+.theory-tbl .top-border td{border-top:2px solid #ccd}
+
+.nt{font-weight:700;color:#1a3a7a;font-family:"Courier New",monospace}
+.prod{color:#333;font-family:"Courier New",monospace}
+.term{background:#f0f0f0;padding:1px 5px;border-radius:3px;color:#8a1500;font-size:12px}
+.eps{font-style:italic;color:#777}
+.pipe{color:#999}
+.set-cell{font-size:12px}
+
+/* Shift/Reduce action cells */
+.sr-shift{background:#e8f5e9;color:#1a6630;font-weight:700;text-align:center}
+.sr-reduce{background:#fdeaea;color:#8a1500;font-weight:700;text-align:center}
+.sr-shift-tag{background:#1a6630;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px}
+.sr-reduce-tag{background:#8a1500;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px}
+.tbl-note{font-size:12px;color:#666;margin-top:8px}
+
+/* Case cards */
+.section-cases-title{font-size:18px;font-weight:700;color:#333;margin:24px 0 12px}
+.case-card{background:#fff;border-radius:12px;margin-bottom:20px;
+  box-shadow:0 1px 6px rgba(0,0,0,.08);overflow:hidden}
+.case-header{display:flex;align-items:center;gap:12px;padding:14px 20px;
+  background:#f8f9fb;border-bottom:1px solid #e8eaee;flex-wrap:wrap}
+.case-num{font-size:12px;font-weight:700;color:#999;min-width:28px}
+.case-desc{font-size:14px;font-weight:600;color:#333;flex:1;min-width:160px}
+.case-src{background:#f0f0f0;color:#c0392b;padding:3px 10px;border-radius:5px;
+  font-size:13px;max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.badge{font-size:11px;font-weight:700;letter-spacing:.5px;
+  padding:3px 10px;border-radius:20px;white-space:nowrap}
+.badge-pass{background:#d4edda;color:#1a6630}
+.badge-lex{background:#fce8d5;color:#8a3500}
+.badge-par{background:#fde8e8;color:#8a1500}
+.badge-sem{background:#fdf3d5;color:#7a5000}
+
+.phases{padding:0 20px 18px}
+.phase-block{margin-top:16px}
+.ph-header{display:flex;align-items:center;gap:8px;padding:8px 12px;
+  border-radius:6px;font-size:13px;font-weight:600;margin-bottom:10px}
+.ph-pass{background:#edfaef;color:#1a6630}
+.ph-fail{background:#fdeaea;color:#8a1500}
+.ph-skip{background:#f2f2f2;color:#888}
+.ph-icon{font-size:15px;width:20px;text-align:center}
+.ph-num{opacity:.7}
+.ph-title{flex:1}
+.ph-body{padding:0 8px}
+.ph-stat{font-size:13px;color:#555;margin-bottom:8px}
+.ph3-sub{font-size:12px;font-weight:600;color:#555;
+  text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px}
+
+/* Token table */
+.tok-tbl{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:4px}
+.tok-tbl th{background:#f2f4f7;text-align:left;padding:5px 10px;
+  font-weight:600;color:#555;border-bottom:1px solid #dde}
+.tok-tbl td{padding:4px 10px;border-bottom:1px solid #f0f0f0}
+.tok-tbl .tt{color:#1a5276;font-weight:600;font-size:12px}
+
+/* Symbol table */
+.sym-tbl{border-collapse:collapse;font-size:13px;margin-bottom:12px;width:auto}
+.sym-tbl th{background:#f2f4f7;padding:6px 16px;border-bottom:1px solid #dde;
+  color:#555;font-weight:600}
+.sym-tbl td{padding:5px 16px;border-bottom:1px solid #f0f0f0}
+
+.print-list{list-style:none;padding:0;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.print-list li{background:#f5f5f5;border-radius:4px;padding:4px 10px;font-size:13px}
+
+/* AST visual */
+.ast-row{display:flex;flex-wrap:wrap;gap:20px;margin-bottom:12px}
+.ast-item{display:flex;flex-direction:column;gap:6px}
+.ast-item-label{font-size:12px;color:#666}
+.ast-item-label code{background:#f0f0f0;padding:1px 6px;border-radius:3px;color:#c0392b}
+.text-ast{background:#f8f9fb;border:1px solid #e4e6ea;border-radius:6px;
+  padding:10px 14px;font-size:13px;font-family:"Courier New",monospace;
+  color:#333;overflow-x:auto;line-height:1.6;margin-top:4px}
+
+/* Parse steps */
+.steps-details{margin-top:10px}
+.steps-details summary{font-size:13px;color:#555;cursor:pointer;padding:6px 10px;
+  background:#f5f5f5;border-radius:5px;user-select:none}
+.step-list{list-style:none;padding:0;margin-top:6px;
+  font-family:"Courier New",monospace;font-size:12px;max-height:320px;overflow-y:auto;
+  border:1px solid #e8eaee;border-radius:6px}
+.step-list li{padding:4px 12px;border-bottom:1px solid #f0f0f0;line-height:1.5}
+.step-shift{background:#f0f7ff;color:#1a3a7a}
+.step-reduce{background:#fff8f0;color:#7a3a00}
+.step-accept{background:#edfaef;color:#1a6630;font-weight:700}
+.step-sep{background:#f5f5f5;color:#888;font-style:italic}
+.step-other{color:#444}
+
+.err-msg{background:#fff5f5;border-left:3px solid #e74c3c;color:#8a1500;
+  font-family:monospace;font-size:13px;padding:10px 14px;
+  border-radius:0 6px 6px 0;white-space:pre-wrap}
+.empty{font-size:13px;color:#aaa;font-style:italic}
+</style>
+</head>
+<body>
+
+<div class="banner">
+  <h1>Front-End Compiler &mdash; Full Report</h1>
+  <div class="sub">
+    1 test cases &bull; both parsers &bull;
+    all three phases &bull; grammar tables &bull; parse steps &bull; symbol table
+  </div>
+</div>
+
+<div class="re-bar">
+  <div>RE1 (numbers) &nbsp;<span>(?P&lt;NUMBER&gt;\d+(?:\.\d+)?)</span></div>
+  <div>RE2 (identifiers) &nbsp;<span>(?P&lt;IDENTIFIER&gt;[a-zA-Z_][a-zA-Z0-9_]*)</span></div>
+  <div>RE3 (operators) &nbsp;<span>(?P&lt;OPERATOR&gt;[+\-*/()=;])</span></div>
+  <div>Master &nbsp;<span>RE1 | RE2 | COMMENT | RE3 | WHITESPACE | INVALID</span></div>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="showTab('tab-td', this)">
+    Top-Down Parser &nbsp;(Recursive Descent, LL(1))
+  </button>
+  <button class="tab-btn" onclick="showTab('tab-bu', this)">
+    Bottom-Up Parser &nbsp;(Shift-Reduce, Operator-Precedence)
+  </button>
+</div>
+
+<div id="tab-td" class="tab-pane active"><div class="summary"><div class="summary-box"><span class="s-num s-blue">1</span><span class="s-lbl">Test cases</span></div><div class="summary-box"><span class="s-num s-green">0</span><span class="s-lbl">Passed</span></div><div class="summary-box"><span class="s-num s-red">1</span><span class="s-lbl">Errors detected</span></div></div>
+<div class="theory-section">
+  <h3 class="theory-title">Grammar</h3>
+  <table class="theory-tbl"><thead><tr><th>Non-terminal</th><th>Production</th></tr></thead><tbody>
+<tr><td><span class="nt">program</span></td><td>&rarr; &nbsp;<code class="term">stmt</code> <code class="term">program</code> <span class="pipe"> | </span> <span class="eps">&epsilon;</span></td></tr>
+<tr><td><span class="nt">stmt</span></td><td>&rarr; &nbsp;<code class="term">id</code> <code class="term">'='</code> <span class="nt">expr</span> <code class="term">';'</code></td></tr>
+<tr><td></td><td>&rarr; &nbsp;<code class="term">'print'</code> <code class="term">'('</code> <span class="nt">expr</span> <code class="term">')'</code> <code class="term">';'</code></td></tr>
+<tr><td></td><td>&rarr; &nbsp;<span class="nt">expr</span> <code class="term">';'</code></td></tr>
+<tr><td><span class="nt">expr</span></td><td>&rarr; &nbsp;<span class="nt">term</span> <span class="nt">expr'</span></td></tr>
+<tr><td><span class="nt">expr'</span></td><td>&rarr; &nbsp;<code class="term">'+'</code> <span class="nt">term</span> <span class="nt">expr'</span> <span class="pipe"> | </span> <code class="term">'-'</code> <span class="nt">term</span> <span class="nt">expr'</span> <span class="pipe"> | </span> <span class="eps">&epsilon;</span></td></tr>
+<tr><td><span class="nt">term</span></td><td>&rarr; &nbsp;<span class="nt">factor</span> <span class="nt">term'</span></td></tr>
+<tr><td><span class="nt">term'</span></td><td>&rarr; &nbsp;<code class="term">'*'</code> <span class="nt">factor</span> <span class="nt">term'</span> <span class="pipe"> | </span> <code class="term">'/'</code> <span class="nt">factor</span> <span class="nt">term'</span> <span class="pipe"> | </span> <span class="eps">&epsilon;</span></td></tr>
+<tr><td><span class="nt">factor</span></td><td>&rarr; &nbsp;<code class="term">'('</code> <span class="nt">expr</span> <code class="term">')'</code> <span class="pipe"> | </span> <code class="term">id</code> <span class="pipe"> | </span> <code class="term">num</code></td></tr>
+</tbody></table>
+  <h3 class="theory-title">FIRST and FOLLOW Sets</h3>
+  <p class="theory-note">Computed from the expression sub-grammar:
+    E &rarr; T E' &nbsp;|&nbsp; E' &rarr; + T E' | &minus; T E' | &epsilon; &nbsp;|&nbsp;
+    T &rarr; F T' &nbsp;|&nbsp; T' &rarr; * F T' | / F T' | &epsilon; &nbsp;|&nbsp;
+    F &rarr; ( E ) | id | num</p>
+  <table class="theory-tbl"><thead><tr><th>A &rarr; &alpha;</th><th>FIRST(&alpha;)</th><th>FOLLOW(A)</th></tr></thead><tbody>
+<tr class="top-border"><td><span class="nt">expr</span> &rarr; <span class="prod"><span class="nt">term</span> <span class="nt">expr'</span></span></td><td class="set-cell">{ <code>(</code>,  <code>id</code>,  <code>num</code> }</td><td class="set-cell">{ <code>$</code>,  <code>)</code> }</td></tr>
+<tr class="top-border"><td><span class="nt">expr'</span> &rarr; <span class="prod"><code class="term">+</code> <span class="nt">term</span> <span class="nt">expr'</span></span></td><td class="set-cell">{ <code>+</code> }</td><td class="set-cell">{ <code>$</code>,  <code>)</code> }</td></tr>
+<tr class=""><td><span class="nt">expr'</span> &rarr; <span class="prod"><code class="term">-</code> <span class="nt">term</span> <span class="nt">expr'</span></span></td><td class="set-cell">{ <code>-</code> }</td><td class="set-cell">{ <code>$</code>,  <code>)</code> }</td></tr>
+<tr class=""><td><span class="nt">expr'</span> &rarr; <span class="prod"><span class="eps">&epsilon;</span></span></td><td class="set-cell">{ <span class="eps">&epsilon;</span> }</td><td class="set-cell">{ <code>$</code>,  <code>)</code> }</td></tr>
+<tr class="top-border"><td><span class="nt">term</span> &rarr; <span class="prod"><span class="nt">factor</span> <span class="nt">term'</span></span></td><td class="set-cell">{ <code>(</code>,  <code>id</code>,  <code>num</code> }</td><td class="set-cell">{ <code>$</code>,  <code>)</code>,  <code>+</code>,  <code>-</code> }</td></tr>
+<tr class="top-border"><td><span class="nt">term'</span> &rarr; <span class="prod"><code class="term">*</code> <span class="nt">factor</span> <span class="nt">term'</span></span></td><td class="set-cell">{ <code>*</code> }</td><td class="set-cell">{ <code>$</code>,  <code>)</code>,  <code>+</code>,  <code>-</code> }</td></tr>
+<tr class=""><td><span class="nt">term'</span> &rarr; <span class="prod"><code class="term">/</code> <span class="nt">factor</span> <span class="nt">term'</span></span></td><td class="set-cell">{ <code>/</code> }</td><td class="set-cell">{ <code>$</code>,  <code>)</code>,  <code>+</code>,  <code>-</code> }</td></tr>
+<tr class=""><td><span class="nt">term'</span> &rarr; <span class="prod"><span class="eps">&epsilon;</span></span></td><td class="set-cell">{ <span class="eps">&epsilon;</span> }</td><td class="set-cell">{ <code>$</code>,  <code>)</code>,  <code>+</code>,  <code>-</code> }</td></tr>
+<tr class="top-border"><td><span class="nt">factor</span> &rarr; <span class="prod"><code class="term">(</code> <span class="nt">expr</span> <code class="term">)</code></span></td><td class="set-cell">{ <code>(</code> }</td><td class="set-cell">{ <code>$</code>,  <code>)</code>,  <code>*</code>,  <code>+</code>,  <code>-</code>,  <code>/</code> }</td></tr>
+<tr class=""><td><span class="nt">factor</span> &rarr; <span class="prod"><code class="term">id</code></span></td><td class="set-cell">{ <code>id</code> }</td><td class="set-cell">{ <code>$</code>,  <code>)</code>,  <code>*</code>,  <code>+</code>,  <code>-</code>,  <code>/</code> }</td></tr>
+<tr class=""><td><span class="nt">factor</span> &rarr; <span class="prod"><code class="term">num</code></span></td><td class="set-cell">{ <code>num</code> }</td><td class="set-cell">{ <code>$</code>,  <code>)</code>,  <code>*</code>,  <code>+</code>,  <code>-</code>,  <code>/</code> }</td></tr>
+</tbody></table>
+  <h3 class="theory-title">LL(1) Predictive Parsing Table &mdash; M[A, a]</h3>
+  <p class="theory-note">Each cell M[A, a] gives the production to use when non-terminal A
+    is on top of the parse stack and token a is the current lookahead.</p>
+  <div class="tbl-scroll"><table class="theory-tbl"><thead><tr><th></th><th>+</th><th>-</th><th>*</th><th>/</th><th>(</th><th>)</th><th>id</th><th>num</th><th>$</th></tr></thead><tbody>
+<tr><td><span class="nt">expr</span></td><td class="empty-cell"></td><td class="empty-cell"></td><td class="empty-cell"></td><td class="empty-cell"></td><td class="ll1-entry"><span class="nt">expr</span> &rarr; <span class="prod"><span class="nt">term</span> <span class="nt">expr'</span></span></td><td class="empty-cell"></td><td class="ll1-entry"><span class="nt">expr</span> &rarr; <span class="prod"><span class="nt">term</span> <span class="nt">expr'</span></span></td><td class="ll1-entry"><span class="nt">expr</span> &rarr; <span class="prod"><span class="nt">term</span> <span class="nt">expr'</span></span></td><td class="empty-cell"></td></tr>
+<tr><td><span class="nt">expr'</span></td><td class="ll1-entry"><span class="nt">expr'</span> &rarr; <span class="prod"><code class="term">+</code> <span class="nt">term</span> <span class="nt">expr'</span></span></td><td class="ll1-entry"><span class="nt">expr'</span> &rarr; <span class="prod"><code class="term">-</code> <span class="nt">term</span> <span class="nt">expr'</span></span></td><td class="empty-cell"></td><td class="empty-cell"></td><td class="empty-cell"></td><td class="ll1-entry"><span class="nt">expr'</span> &rarr; <span class="prod"><span class="eps">&epsilon;</span></span></td><td class="empty-cell"></td><td class="empty-cell"></td><td class="ll1-entry"><span class="nt">expr'</span> &rarr; <span class="prod"><span class="eps">&epsilon;</span></span></td></tr>
+<tr><td><span class="nt">term</span></td><td class="empty-cell"></td><td class="empty-cell"></td><td class="empty-cell"></td><td class="empty-cell"></td><td class="ll1-entry"><span class="nt">term</span> &rarr; <span class="prod"><span class="nt">factor</span> <span class="nt">term'</span></span></td><td class="empty-cell"></td><td class="ll1-entry"><span class="nt">term</span> &rarr; <span class="prod"><span class="nt">factor</span> <span class="nt">term'</span></span></td><td class="ll1-entry"><span class="nt">term</span> &rarr; <span class="prod"><span class="nt">factor</span> <span class="nt">term'</span></span></td><td class="empty-cell"></td></tr>
+<tr><td><span class="nt">term'</span></td><td class="ll1-entry"><span class="nt">term'</span> &rarr; <span class="prod"><span class="eps">&epsilon;</span></span></td><td class="ll1-entry"><span class="nt">term'</span> &rarr; <span class="prod"><span class="eps">&epsilon;</span></span></td><td class="ll1-entry"><span class="nt">term'</span> &rarr; <span class="prod"><code class="term">*</code> <span class="nt">factor</span> <span class="nt">term'</span></span></td><td class="ll1-entry"><span class="nt">term'</span> &rarr; <span class="prod"><code class="term">/</code> <span class="nt">factor</span> <span class="nt">term'</span></span></td><td class="empty-cell"></td><td class="ll1-entry"><span class="nt">term'</span> &rarr; <span class="prod"><span class="eps">&epsilon;</span></span></td><td class="empty-cell"></td><td class="empty-cell"></td><td class="ll1-entry"><span class="nt">term'</span> &rarr; <span class="prod"><span class="eps">&epsilon;</span></span></td></tr>
+<tr><td><span class="nt">factor</span></td><td class="empty-cell"></td><td class="empty-cell"></td><td class="empty-cell"></td><td class="empty-cell"></td><td class="ll1-entry"><span class="nt">factor</span> &rarr; <span class="prod"><code class="term">(</code> <span class="nt">expr</span> <code class="term">)</code></span></td><td class="empty-cell"></td><td class="ll1-entry"><span class="nt">factor</span> &rarr; <span class="prod"><code class="term">id</code></span></td><td class="ll1-entry"><span class="nt">factor</span> &rarr; <span class="prod"><code class="term">num</code></span></td><td class="empty-cell"></td></tr>
+</tbody></table></div>
+</div><h3 class="section-cases-title">Test Cases</h3>
+<div class="case-card">
+  <div class="case-header">
+    <span class="case-num">#1</span>
+    <span class="case-desc">[Top-Down]  Input: y = x + 5</span>
+    <code class="case-src">y = x + 5</code>
+    <span class="badge badge-sem">SEMANTIC ERROR</span>
+  </div>
+  <div class="phases">
+    <div class="phase-block">
+      <div class="ph-header ph-pass"><span class="ph-icon">✓</span><span class="ph-num">Phase 1</span><span class="ph-title">Lexical Analysis</span></div>
+      <div class="ph-body"><p class='ph-stat'>5 token(s) produced</p><table class='tok-tbl'><thead><tr><th>Line:Col</th><th>Type</th><th>Value</th></tr></thead><tbody><tr><td>1:1</td><td class='tt'>IDENTIFIER</td><td><code>&#x27;y&#x27;</code></td></tr><tr><td>1:3</td><td class='tt'>ASSIGN</td><td><code>&#x27;=&#x27;</code></td></tr><tr><td>1:5</td><td class='tt'>IDENTIFIER</td><td><code>&#x27;x&#x27;</code></td></tr><tr><td>1:7</td><td class='tt'>PLUS</td><td><code>&#x27;+&#x27;</code></td></tr><tr><td>1:9</td><td class='tt'>NUMBER</td><td><code>&#x27;5&#x27;</code></td></tr></tbody></table></div>
+    </div>
+    <div class="phase-block">
+      <div class="ph-header ph-pass"><span class="ph-icon">✓</span><span class="ph-num">Phase 2</span><span class="ph-title">Syntax Analysis (Top-Down)</span></div>
+      <div class="ph-body"><div class="ast-row"><div class="ast-item"><div class="ast-item-label">stmt 1: <code>y = x + 5</code></div><svg width="300" height="430" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arr_c1_TopDown_0" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#555"/></marker></defs><line x1="150.0" y1="80.0" x2="150.0" y2="128.0" stroke="#555" stroke-width="2.2" marker-end="url(#arr_c1_TopDown_0)"/><line x1="137.6" y1="187.3" x2="113.2" y2="240.9" stroke="#555" stroke-width="2.2" marker-end="url(#arr_c1_TopDown_0)"/><line x1="162.4" y1="187.3" x2="186.8" y2="240.9" stroke="#555" stroke-width="2.2" marker-end="url(#arr_c1_TopDown_0)"/><circle cx="150" cy="50" r="30" fill="#fff" stroke="#2c3e50" stroke-width="2.5"/><text x="150" y="50" text-anchor="middle" dominant-baseline="central" font-family="Georgia,serif" font-size="15" font-weight="bold" fill="#111">y =</text><circle cx="150" cy="160" r="30" fill="#fff" stroke="#1a1a2e" stroke-width="3"/><text x="150" y="160" text-anchor="middle" dominant-baseline="central" font-family="Georgia,serif" font-size="19" font-weight="bold" fill="#111">+</text><circle cx="100" cy="270" r="30" fill="#fff" stroke="#555" stroke-width="2"/><text x="100" y="270" text-anchor="middle" dominant-baseline="central" font-family="Georgia,serif" font-size="19" font-weight="bold" fill="#111">x</text><circle cx="200" cy="270" r="30" fill="#fff" stroke="#555" stroke-width="2"/><text x="200" y="270" text-anchor="middle" dominant-baseline="central" font-family="Georgia,serif" font-size="19" font-weight="bold" fill="#111">5</text></svg></div></div><pre class="text-ast">Program
+└── Assign  →  &#x27;y&#x27;
+      └── BinOp  [+]
+            ├── Identifier  &#x27;x&#x27;
+            └── Number  5</pre><details class="steps-details"><summary>Parse steps (17)</summary><ul class="step-list"><li class="step-sep">── Statement 1 ──</li><li class="step-other">Predict  stmt → id &#x27;=&#x27; expr &#x27;;&#x27;  [token: IDENTIFIER(&#x27;y&#x27;)]</li><li class="step-other">  Match  id → &#x27;y&#x27;</li><li class="step-other">  Match  &#x27;=&#x27;</li><li class="step-other">  Apply  expr →  [token: IDENTIFIER(&#x27;x&#x27;)]</li><li class="step-other">  Apply  expr → term expr&#x27;  [token: IDENTIFIER(&#x27;x&#x27;)]</li><li class="step-other">  Apply  term → factor term&#x27;  [token: IDENTIFIER(&#x27;x&#x27;)]</li><li class="step-other">  factor → id   Match &#x27;x&#x27;</li><li class="step-other">  term&#x27; → ε  (no more * or /)</li><li class="step-other">  expr&#x27;: Match op &#x27;+&#x27;  → expr&#x27; → &#x27;+&#x27; term expr&#x27;</li><li class="step-other">  Apply  term → factor term&#x27;  [token: NUMBER(&#x27;5&#x27;)]</li><li class="step-other">  factor → num  Match &#x27;5&#x27;</li><li class="step-other">  term&#x27; → ε  (no more * or /)</li><li class="step-other">  Reduce  EXPR &#x27;+&#x27; EXPR  →  BinOp[+]</li><li class="step-other">  expr&#x27; → ε  (no more + or -)</li><li class="step-accept">  Assign &#x27;y&#x27; = &lt;expr&gt;  ✓</li><li class="step-accept">✓  Accept — input fully consumed</li></ul></details></div>
+    </div>
+    <div class="phase-block">
+      <div class="ph-header ph-fail"><span class="ph-icon">✗</span><span class="ph-num">Phase 3</span><span class="ph-title">Semantic Analysis</span></div>
+      <div class="ph-body"><p class="err-msg">[Semantic Error] Undefined variable &#x27;x&#x27;</p></div>
+    </div>
+  </div>
+</div></div>
+<div id="tab-bu" class="tab-pane"><div class="summary"><div class="summary-box"><span class="s-num s-blue">1</span><span class="s-lbl">Test cases</span></div><div class="summary-box"><span class="s-num s-green">0</span><span class="s-lbl">Passed</span></div><div class="summary-box"><span class="s-num s-red">1</span><span class="s-lbl">Errors detected</span></div></div>
+<div class="theory-section">
+  <h3 class="theory-title">Grammar (same productions, built bottom-up)</h3>
+  <table class="theory-tbl"><thead><tr><th>Non-terminal</th><th>Production</th></tr></thead><tbody>
+<tr><td><span class="nt">program</span></td><td>&rarr; &nbsp;<code class="term">stmt</code> <code class="term">program</code> <span class="pipe"> | </span> <span class="eps">&epsilon;</span></td></tr>
+<tr><td><span class="nt">stmt</span></td><td>&rarr; &nbsp;<code class="term">id</code> <code class="term">'='</code> <span class="nt">expr</span> <code class="term">';'</code></td></tr>
+<tr><td></td><td>&rarr; &nbsp;<code class="term">'print'</code> <code class="term">'('</code> <span class="nt">expr</span> <code class="term">')'</code> <code class="term">';'</code></td></tr>
+<tr><td></td><td>&rarr; &nbsp;<span class="nt">expr</span> <code class="term">';'</code></td></tr>
+<tr><td><span class="nt">expr</span></td><td>&rarr; &nbsp;<span class="nt">term</span> <span class="nt">expr'</span></td></tr>
+<tr><td><span class="nt">expr'</span></td><td>&rarr; &nbsp;<code class="term">'+'</code> <span class="nt">term</span> <span class="nt">expr'</span> <span class="pipe"> | </span> <code class="term">'-'</code> <span class="nt">term</span> <span class="nt">expr'</span> <span class="pipe"> | </span> <span class="eps">&epsilon;</span></td></tr>
+<tr><td><span class="nt">term</span></td><td>&rarr; &nbsp;<span class="nt">factor</span> <span class="nt">term'</span></td></tr>
+<tr><td><span class="nt">term'</span></td><td>&rarr; &nbsp;<code class="term">'*'</code> <span class="nt">factor</span> <span class="nt">term'</span> <span class="pipe"> | </span> <code class="term">'/'</code> <span class="nt">factor</span> <span class="nt">term'</span> <span class="pipe"> | </span> <span class="eps">&epsilon;</span></td></tr>
+<tr><td><span class="nt">factor</span></td><td>&rarr; &nbsp;<code class="term">'('</code> <span class="nt">expr</span> <code class="term">')'</code> <span class="pipe"> | </span> <code class="term">id</code> <span class="pipe"> | </span> <code class="term">num</code></td></tr>
+</tbody></table>
+  <h3 class="theory-title">Operator-Precedence Table (Shift vs. Reduce decisions)</h3>
+  <p class="theory-note">When a binary operator is on the stack and another is the lookahead,
+    the parser compares their precedence levels to decide whether to
+    <strong>Shift</strong> (push the lookahead) or <strong>Reduce</strong> (fold the stack).</p>
+  <table class="theory-tbl"><thead><tr><th>Stack op \ Lookahead</th><th>+</th><th>-</th><th>*</th><th>/</th><th>)</th><th>$</th></tr></thead><tbody>
+<tr><td><span class="nt">+</span> (prec=1)</td><td class="sr-reduce">R</td><td class="sr-reduce">R</td><td class="sr-shift">S</td><td class="sr-shift">S</td><td class="sr-reduce">R</td><td class="sr-reduce">R</td></tr>
+<tr><td><span class="nt">-</span> (prec=1)</td><td class="sr-reduce">R</td><td class="sr-reduce">R</td><td class="sr-shift">S</td><td class="sr-shift">S</td><td class="sr-reduce">R</td><td class="sr-reduce">R</td></tr>
+<tr><td><span class="nt">*</span> (prec=2)</td><td class="sr-reduce">R</td><td class="sr-reduce">R</td><td class="sr-reduce">R</td><td class="sr-reduce">R</td><td class="sr-reduce">R</td><td class="sr-reduce">R</td></tr>
+<tr><td><span class="nt">/</span> (prec=2)</td><td class="sr-reduce">R</td><td class="sr-reduce">R</td><td class="sr-reduce">R</td><td class="sr-reduce">R</td><td class="sr-reduce">R</td><td class="sr-reduce">R</td></tr>
+</tbody></table><p class="tbl-note"><span class="sr-shift-tag">S</span> = Shift &nbsp;(lookahead binds tighter) &nbsp;|&nbsp; <span class="sr-reduce-tag">R</span> = Reduce &nbsp;(stack operator has equal or higher precedence)</p>
+  <h3 class="theory-title">Reduce Rules</h3>
+  <p class="theory-note">These grammar productions become reduce actions when the matching
+    pattern appears on the stack top.</p>
+  <table class="theory-tbl"><thead><tr><th>Reduce rule</th><th>When applied</th></tr></thead><tbody>
+<tr><td><code>NUMBER  &rarr;  EXPR</code></td><td>A numeric literal becomes an expression</td></tr>
+<tr><td><code>IDENTIFIER  &rarr;  EXPR</code></td><td>A variable reference becomes an expression</td></tr>
+<tr><td><code>EXPR op EXPR  &rarr;  EXPR</code></td><td>Two exprs joined by +  &minus;  *  / collapse into one</td></tr>
+<tr><td><code>( EXPR )  &rarr;  EXPR</code></td><td>Parenthesised expression unwraps</td></tr>
+<tr><td><code>EXPR ;  &rarr;  STMT</code></td><td>An expression followed by ; becomes a statement</td></tr>
+<tr><td><code>id = EXPR  &rarr;  STMT</code></td><td>Assignment becomes a statement</td></tr>
+<tr><td><code>print ( EXPR )  &rarr;  STMT</code></td><td>Print call becomes a statement</td></tr>
+</tbody></table>
+</div><h3 class="section-cases-title">Test Cases</h3>
+<div class="case-card">
+  <div class="case-header">
+    <span class="case-num">#1</span>
+    <span class="case-desc">[Top-Down]  Input: y = x + 5</span>
+    <code class="case-src">y = x + 5</code>
+    <span class="badge badge-sem">SEMANTIC ERROR</span>
+  </div>
+  <div class="phases">
+    <div class="phase-block">
+      <div class="ph-header ph-pass"><span class="ph-icon">✓</span><span class="ph-num">Phase 1</span><span class="ph-title">Lexical Analysis</span></div>
+      <div class="ph-body"><p class='ph-stat'>5 token(s) produced</p><table class='tok-tbl'><thead><tr><th>Line:Col</th><th>Type</th><th>Value</th></tr></thead><tbody><tr><td>1:1</td><td class='tt'>IDENTIFIER</td><td><code>&#x27;y&#x27;</code></td></tr><tr><td>1:3</td><td class='tt'>ASSIGN</td><td><code>&#x27;=&#x27;</code></td></tr><tr><td>1:5</td><td class='tt'>IDENTIFIER</td><td><code>&#x27;x&#x27;</code></td></tr><tr><td>1:7</td><td class='tt'>PLUS</td><td><code>&#x27;+&#x27;</code></td></tr><tr><td>1:9</td><td class='tt'>NUMBER</td><td><code>&#x27;5&#x27;</code></td></tr></tbody></table></div>
+    </div>
+    <div class="phase-block">
+      <div class="ph-header ph-pass"><span class="ph-icon">✓</span><span class="ph-num">Phase 2</span><span class="ph-title">Syntax Analysis (Bottom-Up)</span></div>
+      <div class="ph-body"><div class="ast-row"><div class="ast-item"><div class="ast-item-label">stmt 1: <code>y = x + 5</code></div><svg width="300" height="430" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arr_c1_BottomUp_0" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#555"/></marker></defs><line x1="150.0" y1="80.0" x2="150.0" y2="128.0" stroke="#555" stroke-width="2.2" marker-end="url(#arr_c1_BottomUp_0)"/><line x1="137.6" y1="187.3" x2="113.2" y2="240.9" stroke="#555" stroke-width="2.2" marker-end="url(#arr_c1_BottomUp_0)"/><line x1="162.4" y1="187.3" x2="186.8" y2="240.9" stroke="#555" stroke-width="2.2" marker-end="url(#arr_c1_BottomUp_0)"/><circle cx="150" cy="50" r="30" fill="#fff" stroke="#2c3e50" stroke-width="2.5"/><text x="150" y="50" text-anchor="middle" dominant-baseline="central" font-family="Georgia,serif" font-size="15" font-weight="bold" fill="#111">y =</text><circle cx="150" cy="160" r="30" fill="#fff" stroke="#1a1a2e" stroke-width="3"/><text x="150" y="160" text-anchor="middle" dominant-baseline="central" font-family="Georgia,serif" font-size="19" font-weight="bold" fill="#111">+</text><circle cx="100" cy="270" r="30" fill="#fff" stroke="#555" stroke-width="2"/><text x="100" y="270" text-anchor="middle" dominant-baseline="central" font-family="Georgia,serif" font-size="19" font-weight="bold" fill="#111">x</text><circle cx="200" cy="270" r="30" fill="#fff" stroke="#555" stroke-width="2"/><text x="200" y="270" text-anchor="middle" dominant-baseline="central" font-family="Georgia,serif" font-size="19" font-weight="bold" fill="#111">5</text></svg></div></div><pre class="text-ast">Program
+└── Assign  →  &#x27;y&#x27;
+      └── BinOp  [+]
+            ├── Identifier  &#x27;x&#x27;
+            └── Number  5</pre><details class="steps-details"><summary>Parse steps (10)</summary><ul class="step-list"><li class="step-shift">Step 1:  SHIFT  IDENTIFIER(&#x27;y&#x27;)  |  stack: [empty]  |  remaining: [&#x27;=&#x27;, &#x27;x&#x27;, &#x27;+&#x27;, &#x27;5&#x27;]</li><li class="step-shift">Step 2:  SHIFT  ASSIGN(&#x27;=&#x27;)  |  stack: [IDENTIFIER]  |  remaining: [&#x27;x&#x27;, &#x27;+&#x27;, &#x27;5&#x27;]</li><li class="step-shift">Step 3:  SHIFT  IDENTIFIER(&#x27;x&#x27;)  |  stack: [IDENTIFIER | ASSIGN]  |  remaining: [&#x27;+&#x27;, &#x27;5&#x27;]</li><li class="step-reduce">Step 4:  REDUCE  IDENTIFIER(&#x27;x&#x27;)  -&gt;  EXPR(id=x)</li><li class="step-shift">Step 5:  SHIFT  PLUS(&#x27;+&#x27;)  |  stack: [IDENTIFIER | ASSIGN | EXPR]  |  remaining: [&#x27;5&#x27;]</li><li class="step-shift">Step 6:  SHIFT  NUMBER(&#x27;5&#x27;)  |  stack: [IDENTIFIER | ASSIGN | EXPR | PLUS]  |  remaining: [&#x27;$&#x27;]</li><li class="step-reduce">Step 7:  REDUCE  NUMBER(&#x27;5&#x27;)  -&gt;  EXPR(5)</li><li class="step-reduce">Step 8:  REDUCE  EXPR &#x27;+&#x27; EXPR  -&gt;  BinOp[+]</li><li class="step-reduce">Step 9:  REDUCE  IDENTIFIER(&#x27;y&#x27;) ASSIGN EXPR  -&gt;  STMT(assign y)</li><li class="step-accept">Accept -- stack fully reduced</li></ul></details></div>
+    </div>
+    <div class="phase-block">
+      <div class="ph-header ph-fail"><span class="ph-icon">✗</span><span class="ph-num">Phase 3</span><span class="ph-title">Semantic Analysis</span></div>
+      <div class="ph-body"><p class="err-msg">[Semantic Error] Undefined variable &#x27;x&#x27;</p></div>
+    </div>
+  </div>
+</div></div>
+
+<script>
+function showTab(id, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+</script>
+</body>
+</html>

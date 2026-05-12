@@ -6,20 +6,19 @@
 #
 # Usage
 # ─────
-#   # Run all built-in test cases (both parsers):
+#   # Run all built-in test cases -> saves compiler_report.html:
 #   python main.py
 #
-#   # Compile a single expression with the default (top-down) parser:
+#   # Compile ONE expression -> saves compiler_report.html for it:
 #   python main.py "x = 3 + 5 * 2"
 #
-#   # Compile with the bottom-up (shift-reduce) parser:
+#   # Same with the bottom-up (shift-reduce) parser:
 #   python main.py --bottom-up "x = 3 + 5 * 2"
 #
-#   # Generate a graphical AST visualization (saves ast_visual.html):
-#   python main.py --visual "3 + 5 * 2"
-#   python main.py --visual --bottom-up "x = 10; y = x + 5"
+#   # Both parsers side-by-side for one expression:
+#   python main.py --both "3 + 5 * 2"
 #
-#   # Compile a .expr file:
+#   # Compile a .expr file -> saves compiler_report.html for it:
 #   python main.py examples/sample.expr
 # ─────────────────────────────────────────────────────────────
 
@@ -29,8 +28,7 @@ import sys
 from pathlib import Path
 
 from compiler.pipeline import compile_source
-
-_BAR  = "=" * 64
+from compiler.report import generate_report
 
 
 # ─────────────────────────────────────────────────────────────
@@ -38,7 +36,7 @@ _BAR  = "=" * 64
 # Each tuple: (description, source)
 # ─────────────────────────────────────────────────────────────
 TEST_CASES: list[tuple[str, str]] = [
-    # ── Valid inputs ──────────────────────────────────────
+    # -- Valid inputs --
     ("Precedence: * before +",              "3 + 5 * 2"),
     ("Parentheses override precedence",     "(2 + 3) * 4"),
     ("Left-associativity of  -",            "10 - 4 - 2"),
@@ -48,7 +46,7 @@ TEST_CASES: list[tuple[str, str]] = [
     ("print() statement",                   "print(42)"),
     ("Comment is stripped",                 "1 + 2 // ignored"),
     ("Complex expression",                  "2 * 3 + 4 * 5"),
-    # ── Error cases ───────────────────────────────────────
+    # -- Error cases --
     ("LEXER  ERROR: invalid character",     "3 + @ 2"),
     ("PARSER ERROR: consecutive operators", "3 + * 2"),
     ("PARSER ERROR: unclosed parenthesis",  "(3 + 5"),
@@ -60,75 +58,78 @@ TEST_CASES: list[tuple[str, str]] = [
 
 
 # ─────────────────────────────────────────────────────────────
-# Visual helper
+# Report helper
 # ─────────────────────────────────────────────────────────────
 
-def _do_visual(source: str, use_bottom_up: bool) -> None:
-    """Generate an HTML AST visualization and print comprehensive output."""
-    from compiler.visualizer import visualize_source
-    
-    saved = visualize_source(source, use_bottom_up=use_bottom_up)
-    parser_name = (
-        "Shift-Reduce  (bottom-up, operator-precedence)"
-        if use_bottom_up else
-        "Recursive Descent  (top-down, LL(1))"
-    )
-    
-    print()
-    print(_BAR)
-    print("  VISUALIZATION GENERATED")
-    print(_BAR)
-    print(f"  Input    : {source!r}")
-    print(f"  Parser   : {parser_name}")
-    print(f"  Output   : {saved.name}")
-    print(f"  Location : {saved.resolve()}")
-    print()
-    print("  Open the HTML file in your web browser to view:")
-    print("    • Lexical Analysis  (tokens)")
-    print("    • Syntax Analysis   (AST)")
-    print("    • Semantic Analysis (symbol table, evaluation results)")
-    print("    • Visual AST        (graphical representation)")
-    print(_BAR)
-    print()
+def _save_report(cases: list[tuple[str, str]], label: str = "") -> None:
+    """Generate compiler_report.html for the given cases and print the path."""
+    report_path = Path("compiler_report.html")
+    try:
+        saved = generate_report(cases, report_path)
+        print()
+        print("=" * 64)
+        if label:
+            print(f"  {label}")
+        print(f"  HTML report saved -> {saved.resolve()}")
+        print("  Open compiler_report.html in your browser.")
+        print("=" * 64)
+    except Exception as exc:
+        print(f"\n  [Report] Could not generate HTML report: {exc}")
 
+
+# ─────────────────────────────────────────────────────────────
+# Entry point
+# ─────────────────────────────────────────────────────────────
 
 def main(argv: list[str]) -> int:
     use_bottom_up = "--bottom-up" in argv
-    use_visual = "--visual" in argv
+    show_both     = "--both"      in argv
     args = [a for a in argv[1:] if not a.startswith("--")]
 
-    if use_visual:
-        if not args:
-            print(f"  Error: --visual requires an input expression")
-            return 1
-        _do_visual(args[0], use_bottom_up)
-        return 0
-
+    # -- Single expression or .expr file ---------------------
     if args:
-        raw = args[0]
+        raw  = args[0]
         path = Path(raw)
         if path.exists() and path.suffix == ".expr":
-            source = path.read_text(encoding="utf-8")
-            # Run each non-blank, non-comment line as its own statement
-            compile_source(source, use_bottom_up=use_bottom_up)
+            source      = path.read_text(encoding="utf-8")
+            description = path.stem
         else:
-            compile_source(raw, use_bottom_up=use_bottom_up)
+            source      = raw
+            description = "Input: " + raw
+
+        if show_both:
+            # Run with BOTH parsers so the report shows two tab sections
+            cases = [
+                ("[Top-Down]   " + description, source),
+                ("[Bottom-Up]  " + description, source),
+            ]
+            for flag, lbl in [(False, "TOP-DOWN"), (True, "BOTTOM-UP")]:
+                print()
+                print("  -- " + lbl + " --")
+                compile_source(source, use_bottom_up=flag)
+            _save_report(cases, "Report for: " + repr(source) + "  (both parsers)")
+        else:
+            parser_label = "Bottom-Up" if use_bottom_up else "Top-Down"
+            cases = [("[" + parser_label + "]  " + description, source)]
+            compile_source(source, use_bottom_up=use_bottom_up)
+            _save_report(cases, "Report for: " + repr(source) + "  (" + parser_label + " parser)")
+
         return 0
 
-    # No arguments — run the full built-in test suite twice:
-    # once with each parser so both are demonstrated.
-    for parser_flag, label in [
+    # -- No arguments: full built-in test suite ---------------
+    for parser_flag, lbl in [
         (False, "TOP-DOWN  (Recursive Descent, LL(1))"),
         (True,  "BOTTOM-UP (Shift-Reduce, operator-precedence)"),
     ]:
         print()
         print("*" * 64)
-        print(f"  PARSER MODE: {label}")
+        print("  PARSER MODE: " + lbl)
         print("*" * 64)
         for description, source in TEST_CASES:
-            print(f"\n  ► {description}")
+            print("\n  >> " + description)
             compile_source(source, use_bottom_up=parser_flag)
 
+    _save_report(TEST_CASES, "Full test suite -- all cases, both parsers")
     return 0
 
 

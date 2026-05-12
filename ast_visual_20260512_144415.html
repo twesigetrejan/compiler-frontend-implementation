@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AST & Compilation Phases — x = 10; y = x + 5; z=2+y@</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body {
+    background: #eef0f3;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100vh;
+  }
+
+  /* ── Banner ── */
+  .banner {
+    background: #1a1a2e;
+    color: #ddd;
+    padding: 22px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .banner h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: .4px;
+  }
+  
+  .banner .meta {
+    font-size: 13px;
+    color: #999;
+  }
+  
+  .banner .meta span {
+    background: #2d2d4a;
+    color: #e0e0ff;
+    font-family: "Courier New", monospace;
+    font-size: 13px;
+    padding: 2px 10px;
+    border-radius: 4px;
+    border: 1px solid #44447a;
+  }
+
+  /* ── Tabs Navigation ── */
+  .tabs {
+    background: #2c2c3d;
+    display: flex;
+    gap: 2px;
+    padding: 0 36px;
+    border-bottom: 1px solid #444;
+  }
+  
+  .tab {
+    padding: 14px 18px;
+    background: transparent;
+    color: #999;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+    border-bottom: 2px solid transparent;
+  }
+  
+  .tab:hover {
+    color: #ddd;
+  }
+  
+  .tab.active {
+    color: #fff;
+    border-bottom-color: #64b5f6;
+  }
+
+  /* ── Content Area ── */
+  .content {
+    padding: 32px 36px;
+  }
+  
+  .section {
+    display: none;
+  }
+  
+  .section.active {
+    display: block;
+  }
+  
+  .section h2 {
+    font-size: 18px;
+    color: #333;
+    margin-bottom: 16px;
+    border-bottom: 2px solid #ddd;
+    padding-bottom: 10px;
+  }
+  
+  .section h3 {
+    font-size: 14px;
+    color: #555;
+    margin-top: 16px;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  
+  .phase-content {
+    background: #f8f9fa;
+    padding: 16px;
+    border-radius: 8px;
+    border-left: 3px solid #64b5f6;
+  }
+  
+  .phase-info {
+    font-size: 12px;
+    color: #666;
+    margin: 8px 0;
+    font-style: italic;
+  }
+  
+  .output {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 12px;
+    font-family: "Courier New", monospace;
+    font-size: 12px;
+    color: #333;
+    overflow-x: auto;
+    margin: 10px 0;
+    line-height: 1.5;
+  }
+  
+  .result {
+    color: #27ae60;
+    font-weight: 600;
+    font-size: 13px;
+    margin-top: 12px;
+  }
+  
+  .output.error {
+    border-left: 3px solid #e74c3c;
+    color: #c0392b;
+    background: #fdf2f2;
+  }
+
+  /* ── Layout ── */
+  .container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px;
+    align-items: flex-start;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 20px 22px;
+    box-shadow: 0 2px 14px rgba(0,0,0,.09);
+    display: inline-flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #666;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .card-expr {
+    background: #f5f5f5;
+    color: #c0392b;
+    font-family: "Courier New", monospace;
+    font-size: 13px;
+    padding: 2px 10px;
+    border-radius: 5px;
+    font-weight: 500;
+  }
+
+  /* ── Legend ── */
+  .legend {
+    padding: 28px 36px 0;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #555;
+  }
+  
+  .legend-circle {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: #fff;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  
+  .legend-circle.op   { border: 3px solid #1a1a2e; }
+  .legend-circle.val  { border: 2px solid #555; }
+  .legend-circle.stmt { border: 2.5px solid #2c3e50; }
+</style>
+</head>
+<body>
+
+<div class="banner">
+  <h1>Compiler Visualization</h1>
+  <div class="meta">
+    Input: <span>x = 10; y = x + 5; z=2+y@</span>
+    &nbsp;&nbsp;Parser: Recursive Descent &nbsp;(top-down, LL(1))
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('phase-1')">Lexical Analysis</button>
+  <button class="tab" onclick="showTab('phase-2')">Syntax Analysis</button>
+  <button class="tab" onclick="showTab('phase-3')">Semantic Analysis</button>
+  <button class="tab" onclick="showTab('visual')">Visual AST</button>
+</div>
+
+<div class="content">
+  
+    <div class="section" id="phase-1">
+      <h2>Phase 1 — Lexical Analysis</h2>
+      <div class="phase-content">
+        <p class="phase-info">Tokenized input using regex patterns for numbers, identifiers, and operators.</p>
+        <pre class="output"></pre>
+        <p class="phase-info">✓ 0 token(s) produced.</p>
+        <h3 style="color: #e74c3c; margin-top: 16px;">✗ Lexical Errors:</h3>
+        <pre class="output error">[Lexer Error] Unexpected character '@' at line 1, column 25</pre>
+      </div>
+    </div>
+            
+  
+  
+  
+  <div class="section active" id="visual">
+    <h2>Visual Abstract Syntax Tree</h2>
+    <div class="phase-content">
+      <p class="phase-info">Graphical representation of each statement's AST structure.</p>
+      <p class="phase-info" style="color: #e74c3c;">No AST available due to errors in earlier compilation phases. Check the Lexical Analysis and Syntax Analysis tabs for details.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(tabId) {
+  // Hide all sections
+  const sections = document.querySelectorAll('.section');
+  sections.forEach(s => s.classList.remove('active'));
+  
+  // Show selected section
+  const selected = document.getElementById(tabId);
+  if (selected) selected.classList.add('active');
+  
+  // Update tab buttons
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>
