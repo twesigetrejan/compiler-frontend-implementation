@@ -65,6 +65,13 @@ class Identifier(ASTNode):
     name: str
 
 
+@dataclass(frozen=True, slots=True)
+class UnaryOp(ASTNode):
+    """Unary arithmetic operation:  -expr  or  +expr"""
+    op:    str        # '-' | '+'
+    value: ASTNode
+
+
 # ═══════════════════════════════════════════════════════════════
 # AST tree printer
 # ═══════════════════════════════════════════════════════════════
@@ -109,6 +116,10 @@ def format_ast(node: ASTNode, prefix: str = "", is_last: bool = True) -> str:
 
     elif isinstance(node, Identifier):
         lines.append(f"{prefix}{connector}Identifier  {node.name!r}")
+
+    elif isinstance(node, UnaryOp):
+        lines.append(f"{prefix}{connector}UnaryOp  [{node.op}]")
+        lines.append(format_ast(node.value, child_pfx, True))
 
     else:
         lines.append(f"{prefix}{connector}<unknown node: {type(node).__name__}>")

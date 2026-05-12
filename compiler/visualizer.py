@@ -24,7 +24,8 @@ from datetime import datetime
 from pathlib import Path
 
 from compiler.ast_nodes import (
-    ASTNode, Assign, BinOp, Identifier, Number, PrintStmt, Program, format_ast,
+    ASTNode, Assign, BinOp, Identifier, Number, PrintStmt, Program, UnaryOp,
+    format_ast,
 )
 from compiler.lexer import Lexer, format_tokens
 from compiler.parser import Parser, ParseError
@@ -47,6 +48,8 @@ _PAD    = 50    # canvas padding on each side
 def _label(node: ASTNode) -> str:
     if isinstance(node, BinOp):
         return node.op
+    if isinstance(node, UnaryOp):
+        return f"{node.op}_"  # Unary operator label
     if isinstance(node, Number):
         v = node.value
         # Show 3.0 as "3" for cleaner display
@@ -63,6 +66,8 @@ def _label(node: ASTNode) -> str:
 def _children(node: ASTNode) -> list[ASTNode]:
     if isinstance(node, BinOp):
         return [node.left, node.right]
+    if isinstance(node, UnaryOp):
+        return [node.value]
     if isinstance(node, Assign):
         return [node.value]
     if isinstance(node, PrintStmt):
@@ -192,7 +197,7 @@ def _stmt_svg(stmt: ASTNode, svg_id: str) -> tuple[str, int, int]:
         cx, cy = px(n.x), py(n.depth)
 
         # Operator nodes get a light tint so they stand out
-        if isinstance(n.node, BinOp):
+        if isinstance(n.node, (BinOp, UnaryOp)):
             fill = "#fff"
             stroke_color = "#1a1a2e"
             stroke_w = "3"
@@ -232,6 +237,8 @@ def _src(node: ASTNode) -> str:
     """Rebuild a compact source string from an AST node (for card labels)."""
     if isinstance(node, BinOp):
         return f"{_src(node.left)} {node.op} {_src(node.right)}"
+    if isinstance(node, UnaryOp):
+        return f"{node.op}{_src(node.value)}"
     if isinstance(node, Number):
         v = node.value
         return str(int(v)) if isinstance(v, float) and v == int(v) else str(v)
@@ -249,7 +256,7 @@ def _src(node: ASTNode) -> str:
 # ══════════════════════════════════════════════════════════════
 
 def _generate_html(
-    program: Program,
+    program: Program | None,
     source: str,
     parser_name: str,
     tokens: list = None,
@@ -257,32 +264,50 @@ def _generate_html(
     symbol_table: dict = None,
     evaluation_results: list = None,
     lex_errors: list = None,
-    parse_error: str = "",
+    lex_error_text: str = "",
+    parse_error_text: str = "",
     semantic_error: str = "",
 ) -> str:
-    """Generate HTML with all compilation phases and visual AST."""
+    """Generate HTML with all compilation phases and visual AST, including errors."""
     
     cards: list[str] = []
-    for i, stmt in enumerate(program.statements):
-        svg_str, _w, _h = _stmt_svg(stmt, svg_id=str(i))
-        label = _src(stmt)
-        cards.append(
-            f'<div class="card">'
-            f'<div class="card-title">Statement {i + 1}'
-            f'<span class="card-expr">{label}</span></div>'
-            f'{svg_str}'
-            f'</div>'
-        )
+    if program is not None:
+        for i, stmt in enumerate(program.statements):
+            svg_str, _w, _h = _stmt_svg(stmt, svg_id=str(i))
+            label = _src(stmt)
+            cards.append(
+                f'<div class="card">'
+                f'<div class="card-title">Statement {i + 1}'
+                f'<span class="card-expr">{label}</span></div>'
+                f'{svg_str}'
+                f'</div>'
+            )
 
     # Escape source for HTML display
     source_html = source.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     
     # Format tokens section
     tokens_html = ""
-    if tokens:
-        non_eof = [t for t in tokens if t.type != TokenType.EOF]
-        tokens_lines = format_tokens(tokens).split("\n")
-        tokens_html = f'''
+    if tokens or lex_error_text:
+        if lex_error_text:
+            non_eof = [t for t in tokens if t.type != TokenType.EOF] if tokens else []
+            tokens_lines = format_tokens(tokens).split("\n") if tokens else []
+            tokens_html = f'''
+    <div class="section" id="phase-1">
+      <h2>Phase 1 — Lexical Analysis</h2>
+      <div class="phase-content">
+        <p class="phase-info">Tokenized input using regex patterns for numbers, identifiers, and operators.</p>
+        <pre class="output">{chr(10).join(tokens_lines)}</pre>
+        <p class="phase-info">✓ {len(non_eof)} token(s) produced.</p>
+        <h3 style="color: #e74c3c; margin-top: 16px;">✗ Lexical Errors:</h3>
+        <pre class="output error">{lex_error_text}</pre>
+      </div>
+    </div>
+            '''
+        else:
+            non_eof = [t for t in tokens if t.type != TokenType.EOF]
+            tokens_lines = format_tokens(tokens).split("\n")
+            tokens_html = f'''
     <div class="section" id="phase-1">
       <h2>Phase 1 — Lexical Analysis</h2>
       <div class="phase-content">
@@ -291,13 +316,28 @@ def _generate_html(
         <p class="result">✓ {len(non_eof)} token(s) produced.</p>
       </div>
     </div>
-        '''
+            '''
     
     # Format AST section
     ast_html = ""
-    if ast_text:
-        ast_lines = ast_text.split("\n")
-        ast_html = f'''
+    if ast_text or parse_error_text:
+        if parse_error_text:
+            ast_lines = ast_text.split("\n") if ast_text else []
+            ast_html = f'''
+    <div class="section" id="phase-2">
+      <h2>Phase 2 — Syntax Analysis</h2>
+      <div class="phase-content">
+        <p class="phase-info">Parser: {parser_name}</p>
+        <p class="phase-info">Associativity: Left-to-right for all binary operators</p>
+        <p class="phase-info">Precedence: +/- &lt; */ &lt; () &lt; atoms (low → high)</p>
+        <h3 style="color: #e74c3c; margin-top: 16px;">✗ Parse Error:</h3>
+        <pre class="output error">{parse_error_text}</pre>
+      </div>
+    </div>
+            '''
+        else:
+            ast_lines = ast_text.split("\n")
+            ast_html = f'''
     <div class="section" id="phase-2">
       <h2>Phase 2 — Syntax Analysis</h2>
       <div class="phase-content">
@@ -309,28 +349,36 @@ def _generate_html(
         <p class="result">✓ AST built successfully.</p>
       </div>
     </div>
-        '''
+            '''
     
     # Format semantic analysis section
     semantic_html = ""
-    if symbol_table is not None or evaluation_results:
+    if symbol_table is not None or evaluation_results or semantic_error:
         semantic_content = '<div class="phase-content"><p class="phase-info">Checks: undefined variables | division by zero | type consistency</p>'
         
-        if symbol_table:
-            semantic_content += '<h3>Symbol table (global scope):</h3><pre class="output">'
-            for name, val in symbol_table.items():
-                semantic_content += f"  {name}  =  {val}\n"
-            semantic_content += '</pre>'
-        
-        if evaluation_results:
-            numeric_results = [(i + 1, r) for i, r in enumerate(evaluation_results) if r is not None]
-            if numeric_results:
-                semantic_content += '<h3>Evaluation results:</h3><pre class="output">'
-                for idx, val in numeric_results:
-                    semantic_content += f"  statement {idx}  →  {val}\n"
+        if semantic_error:
+            semantic_content += f'''
+        <h3 style="color: #e74c3c; margin-top: 16px;">✗ Semantic Error:</h3>
+        <pre class="output error">{semantic_error}</pre>
+            '''
+        else:
+            if symbol_table:
+                semantic_content += '<h3>Symbol table (global scope):</h3><pre class="output">'
+                for name, val in symbol_table.items():
+                    semantic_content += f"  {name}  =  {val}\n"
                 semantic_content += '</pre>'
+            
+            if evaluation_results:
+                numeric_results = [(i + 1, r) for i, r in enumerate(evaluation_results) if r is not None]
+                if numeric_results:
+                    semantic_content += '<h3>Evaluation results:</h3><pre class="output">'
+                    for idx, val in numeric_results:
+                        semantic_content += f"  statement {idx}  →  {val}\n"
+                    semantic_content += '</pre>'
+            
+            semantic_content += '<p class="result">✓ Semantic analysis passed.</p>'
         
-        semantic_content += '<p class="result">✓ Semantic analysis passed.</p></div>'
+        semantic_content += '</div>'
         
         semantic_html = f'''
     <div class="section" id="phase-3">
@@ -477,6 +525,12 @@ def _generate_html(
     font-size: 13px;
     margin-top: 12px;
   }}
+  
+  .output.error {{
+    border-left: 3px solid #e74c3c;
+    color: #c0392b;
+    background: #fdf2f2;
+  }}
 
   /* ── Layout ── */
   .container {{
@@ -571,10 +625,7 @@ def _generate_html(
     <h2>Visual Abstract Syntax Tree</h2>
     <div class="phase-content">
       <p class="phase-info">Graphical representation of each statement's AST structure.</p>
-      <div class="container">
-        {"".join(cards)}
-      </div>
-  
+      {f'<div class="container">{"".join(cards)}</div>' if cards else '<p class="phase-info" style="color: #e74c3c;">No AST available due to errors in earlier compilation phases. Check the Lexical Analysis and Syntax Analysis tabs for details.</p>'}
     </div>
   </div>
 </div>
@@ -623,52 +674,57 @@ def visualize_source(
     # PHASE 1 — LEXICAL ANALYSIS
     # ─────────────────────────────────────────────────────────────
     tokens, lex_errors = Lexer(source).tokenize()
-    if lex_errors:
-        raise ValueError(f"Lexer errors — cannot visualize:\n" +
-                         "\n".join(str(e) for e in lex_errors))
+    lex_error_text = "\n".join(str(e) for e in lex_errors) if lex_errors else None
 
     # ─────────────────────────────────────────────────────────────
     # PHASE 2 — SYNTAX ANALYSIS
     # ─────────────────────────────────────────────────────────────
-    try:
-        if use_bottom_up:
-            program     = BottomUpParser(tokens).parse()
-            parser_name = "Shift-Reduce &nbsp;(bottom-up, operator-precedence)"
-        else:
-            program     = Parser(tokens).parse()
-            parser_name = "Recursive Descent &nbsp;(top-down, LL(1))"
-    except (ParseError, BottomUpParseError) as err:
-        raise ValueError(f"Parse error — cannot visualize: {err}")
+    program = None
+    parse_error_text = None
+    ast_text = ""
 
-    # Format AST for display
-    ast_text = format_ast(program)
+    if not lex_errors:
+        parser_name = "Shift-Reduce &nbsp;(bottom-up, operator-precedence)" if use_bottom_up else "Recursive Descent &nbsp;(top-down, LL(1))"
+        try:
+            if use_bottom_up:
+                program     = BottomUpParser(tokens).parse()
+            else:
+                program     = Parser(tokens).parse()
+            ast_text = format_ast(program)
+        except (ParseError, BottomUpParseError) as err:
+            parse_error_text = str(err)
+    else:
+        parser_name = "Shift-Reduce &nbsp;(bottom-up, operator-precedence)" if use_bottom_up else "Recursive Descent &nbsp;(top-down, LL(1))"
 
     # ─────────────────────────────────────────────────────────────
     # PHASE 3 — SEMANTIC ANALYSIS
     # ─────────────────────────────────────────────────────────────
     symbol_table = None
     evaluation_results = None
-    semantic_error = None
+    semantic_error_text = None
 
-    try:
-        analyzer = SemanticAnalyzer()
-        results  = analyzer.analyze(program)
-        symbol_table = dict(analyzer.symbol_table) if analyzer.symbol_table else {}
-        evaluation_results = results
-    except SemanticError as err:
-        semantic_error = str(err)
+    if program is not None:
+        try:
+            analyzer = SemanticAnalyzer()
+            results  = analyzer.analyze(program)
+            symbol_table = dict(analyzer.symbol_table) if analyzer.symbol_table else {}
+            evaluation_results = results
+        except SemanticError as err:
+            semantic_error_text = str(err)
 
     # Generate the enhanced HTML
     html = _generate_html(
         program=program,
         source=source,
         parser_name=parser_name,
-        tokens=tokens,
+        tokens=tokens if not lex_errors else None,
         ast_text=ast_text,
         symbol_table=symbol_table,
         evaluation_results=evaluation_results,
         lex_errors=lex_errors,
-        semantic_error=semantic_error,
+        lex_error_text=lex_error_text,
+        parse_error_text=parse_error_text,
+        semantic_error=semantic_error_text,
     )
 
     # Generate unique filename if not provided

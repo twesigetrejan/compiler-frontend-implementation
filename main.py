@@ -66,38 +66,30 @@ TEST_CASES: list[tuple[str, str]] = [
 def _do_visual(source: str, use_bottom_up: bool) -> None:
     """Generate an HTML AST visualization and print comprehensive output."""
     from compiler.visualizer import visualize_source
-    try:
-        saved = visualize_source(source, use_bottom_up=use_bottom_up)
-        parser_name = (
-            "Shift-Reduce  (bottom-up, operator-precedence)"
-            if use_bottom_up else
-            "Recursive Descent  (top-down, LL(1))"
-        )
-        
-        print()
-        print(_BAR)
-        print("  VISUALIZATION GENERATED")
-        print(_BAR)
-        print(f"  Input    : {source!r}")
-        print(f"  Parser   : {parser_name}")
-        print(f"  Output   : {saved.name}")
-        print(f"  Location : {saved.resolve()}")
-        print()
-        print("  Open the HTML file in your web browser to view:")
-        print("    • Lexical Analysis  (tokens)")
-        print("    • Syntax Analysis   (AST)")
-        print("    • Semantic Analysis (symbol table, evaluation results)")
-        print("    • Visual AST        (graphical representation)")
-        print(_BAR)
-        print()
-    except Exception as exc:
-        print()
-        print(_BAR)
-        print("  VISUALIZATION FAILED")
-        print(_BAR)
-        print(f"  Error: {exc}")
-        print(_BAR)
-        print()
+    
+    saved = visualize_source(source, use_bottom_up=use_bottom_up)
+    parser_name = (
+        "Shift-Reduce  (bottom-up, operator-precedence)"
+        if use_bottom_up else
+        "Recursive Descent  (top-down, LL(1))"
+    )
+    
+    print()
+    print(_BAR)
+    print("  VISUALIZATION GENERATED")
+    print(_BAR)
+    print(f"  Input    : {source!r}")
+    print(f"  Parser   : {parser_name}")
+    print(f"  Output   : {saved.name}")
+    print(f"  Location : {saved.resolve()}")
+    print()
+    print("  Open the HTML file in your web browser to view:")
+    print("    • Lexical Analysis  (tokens)")
+    print("    • Syntax Analysis   (AST)")
+    print("    • Semantic Analysis (symbol table, evaluation results)")
+    print("    • Visual AST        (graphical representation)")
+    print(_BAR)
+    print()
 
 
 def main(argv: list[str]) -> int:

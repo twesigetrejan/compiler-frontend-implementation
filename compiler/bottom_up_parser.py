@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from compiler.ast_nodes import (
-    ASTNode, Assign, BinOp, Identifier, Number, PrintStmt, Program,
+    ASTNode, Assign, BinOp, Identifier, Number, PrintStmt, Program, UnaryOp,
     format_ast,
 )
 from compiler.lexer import Lexer
@@ -116,6 +116,7 @@ class BottomUpParser:
         return (
             self._reduce_literal()
             or self._reduce_identifier(lookahead)
+            or self._reduce_unary()
             or self._reduce_print()
             or self._reduce_parenthesised()
             or self._reduce_binary(lookahead)
@@ -134,6 +135,25 @@ class BottomUpParser:
         raw = sym.token.value
         val = float(raw) if "." in raw else int(raw)
         self.stack.append(Symbol("EXPR", Number(val), sym.token))
+        return True
+
+    def _reduce_unary(self) -> bool:
+        """(MINUS | PLUS) EXPR → EXPR  [unary negation or positive]"""
+        if len(self.stack) < 2:
+            return False
+        right_sym = self.stack[-1]
+        op_sym    = self.stack[-2]
+
+        if right_sym.kind != "EXPR":
+            return False
+        if op_sym.token.type not in (TokenType.MINUS, TokenType.PLUS):
+            return False
+
+        self.stack[-2:] = [Symbol(
+            "EXPR",
+            UnaryOp(op_sym.token.value, right_sym.value),
+            op_sym.token,
+        )]
         return True
 
     def _reduce_identifier(self, lookahead: Token) -> bool:
@@ -165,9 +185,24 @@ class BottomUpParser:
     def _reduce_parenthesised(self) -> bool:
         """
         LPAREN EXPR RPAREN → EXPR
+        Also handles: LPAREN (MINUS|PLUS) EXPR RPAREN → EXPR (unary inside parens)
         Guard: skip if the item before LPAREN is PRINT — that case
         belongs to _reduce_print (same guard as reference implementation).
         """
+        # First try: LPAREN (MINUS|PLUS) EXPR RPAREN → EXPR with unary
+        if (self._suffix_is("LPAREN", None, "EXPR", "RPAREN") and
+            len(self.stack) >= 4 and
+            self.stack[-4].kind == "LPAREN" and
+            self.stack[-3].token.type in (TokenType.MINUS, TokenType.PLUS)):
+            # Don't fire inside a print() call
+            if len(self.stack) >= 5 and self.stack[-5].kind == "PRINT":
+                return False
+            _rp, expr, op, _lp = self.stack.pop(), self.stack.pop(), self.stack.pop(), self.stack.pop()
+            unary_node = UnaryOp(op.token.value, expr.value)
+            self.stack.append(Symbol("EXPR", unary_node, _lp.token))
+            return True
+        
+        # Standard case: LPAREN EXPR RPAREN → EXPR
         if not self._suffix_is("LPAREN", "EXPR", "RPAREN"):
             return False
         # Don't fire inside a print() call

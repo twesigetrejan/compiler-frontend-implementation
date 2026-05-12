@@ -34,7 +34,7 @@ import sys
 from pathlib import Path
 
 from compiler.ast_nodes import (
-    ASTNode, Assign, BinOp, Identifier, Number, PrintStmt, Program,
+    ASTNode, Assign, BinOp, Identifier, Number, PrintStmt, Program, UnaryOp,
     format_ast,
 )
 from compiler.lexer import Lexer
@@ -163,8 +163,14 @@ class Parser:
         return node
 
     def _factor(self) -> ASTNode:
-        """factor → NUMBER | IDENTIFIER | '(' expr ')'   [highest / atoms]"""
+        """factor → ('+' | '-') factor | NUMBER | IDENTIFIER | '(' expr ')'   [highest / atoms]"""
         tok = self._current()
+
+        # Unary operators: -expr or +expr
+        if tok.type in (TokenType.MINUS, TokenType.PLUS):
+            op_tok = self._advance()
+            operand = self._factor()
+            return UnaryOp(op_tok.value, operand)
 
         if tok.type == TokenType.NUMBER:
             self._advance()
