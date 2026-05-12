@@ -34,7 +34,7 @@ import sys
 from pathlib import Path
 
 from compiler.ast_nodes import (
-    ASTNode, Assign, BinOp, Identifier, Number, PrintStmt, Program,
+    ASTNode, Assign, BinOp, Identifier, Number, PrintStmt, Program, UnaryOp,
     format_ast,
 )
 from compiler.lexer import Lexer
@@ -258,8 +258,35 @@ class Parser:
         return node
 
     def _factor(self) -> ASTNode:
-        """factor → NUMBER | IDENTIFIER | '(' expr ')'   [highest / atoms]"""
+        """factor → NUMBER | IDENTIFIER | '(' expr ')' | '+' factor | '-' factor"""
         tok = self._current()
+
+        # Handle unary plus: '+' factor
+        if tok.type == TokenType.PLUS:
+            self._record_ll1_decision(
+                "F", "PLUS",
+                "F → '+' factor",
+                "Unary plus operator"
+            )
+            self._advance()  # consume '+'
+            self.steps.append("  factor → '+' factor  Match '+' (unary)")
+            operand = self._factor()
+            # Unary plus doesn't change the value, just wrap it
+            from compiler.ast_nodes import UnaryOp
+            return UnaryOp("+", operand)
+
+        # Handle unary minus: '-' factor
+        if tok.type == TokenType.MINUS:
+            self._record_ll1_decision(
+                "F", "MINUS",
+                "F → '-' factor",
+                "Unary minus operator"
+            )
+            self._advance()  # consume '-'
+            self.steps.append("  factor → '-' factor  Match '-' (unary)")
+            operand = self._factor()
+            from compiler.ast_nodes import UnaryOp
+            return UnaryOp("-", operand)
 
         if tok.type == TokenType.NUMBER:
             self._advance()

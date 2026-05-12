@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from compiler.ast_nodes import (
-    ASTNode, Assign, BinOp, Identifier, Number, PrintStmt, Program,
+    ASTNode, Assign, BinOp, Identifier, Number, PrintStmt, Program, UnaryOp,
 )
 from compiler.lexer import Lexer
 from compiler.parser import Parser
@@ -140,6 +140,21 @@ class SemanticAnalyzer:
                 "*": lambda a, b: a * b,
                 "/": lambda a, b: a / b,
             }[node.op](left, right)
+
+        if isinstance(node, UnaryOp):
+            operand = self.analyze(node.expr)
+            
+            # Type check
+            if not isinstance(operand, (int, float)):
+                raise SemanticError(
+                    f"[Semantic Error] Operand of unary '{node.op}' "
+                    f"is not numeric: {operand!r}"
+                )
+            
+            return {
+                "+": lambda x: +x,
+                "-": lambda x: -x,
+            }[node.op](operand)
 
         if isinstance(node, Number):
             return node.value

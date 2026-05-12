@@ -48,24 +48,25 @@ from __future__ import annotations
 #   T  → F T'
 #   T' → * F T' | / F T' | eps
 
-# Display form: left-recursion-free expression grammar
+# Display form: left-recursion-free expression grammar with unary operators
 FULL_GRAMMAR = [
     ("E",   "T  E'"),
     ("E'",  "'+'  T  E'   |   '-'  T  E'   |   eps"),
     ("T",   "F  T'"),
     ("T'",  "'*'  F  T'   |   '/'  F  T'   |   eps"),
-    ("F",   "'('  E  ')'   |   id   |   num"),
+    ("F",   "'+'  F   |   '-'  F   |   '('  E  ')'   |   id   |   num"),
 ]
 
 # For HTML reports: original grammar (for comparison)
 ORIGINAL_GRAMMAR = [
     ("E",   "E  '+'  T   |   E  '-'  T   |   T"),
     ("T",   "T  '*'  F   |   T  '/'  F   |   F"),
-    ("F",   "'('  E  ')'   |   id   |   num"),
+    ("F",   "'+'  F   |   '-'  F   |   '('  E  ')'   |   id   |   num"),
 ]
 
 # Expression sub-grammar in machine-readable form (for FIRST/FOLLOW/LL(1))
 # This is the LEFT-RECURSION-FREE version used by the LL(1) parser
+# Updated to include unary operators in F
 _NT  = ["E", "E'", "T", "T'", "F"]
 _T   = ["+", "-", "*", "/", "(", ")", "id", "num", "$"]
 _SYM = set(_NT)
@@ -79,7 +80,9 @@ EXPR_GRAMMAR: dict[str, list[list[str]]] = {
     "T'": [["*",  "F",  "T'"],
            ["/",  "F",  "T'"],
            ["eps"]],
-    "F":  [["(", "E", ")"],
+    "F":  [["+", "F"],
+           ["-", "F"],
+           ["(", "E", ")"],
            ["id"],
            ["num"]],
 }

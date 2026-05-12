@@ -18,7 +18,7 @@ import math
 from pathlib import Path
 
 from compiler.ast_nodes import (
-    ASTNode, Assign, BinOp, Identifier, Number, PrintStmt, Program,
+    ASTNode, Assign, BinOp, Identifier, Number, PrintStmt, Program, UnaryOp,
 )
 from compiler.lexer import Lexer
 from compiler.parser import Parser
@@ -39,6 +39,8 @@ _PAD    = 50    # canvas padding on each side
 def _label(node: ASTNode) -> str:
     if isinstance(node, BinOp):
         return node.op
+    if isinstance(node, UnaryOp):
+        return f"{node.op}"
     if isinstance(node, Number):
         v = node.value
         # Show 3.0 as "3" for cleaner display
@@ -55,6 +57,8 @@ def _label(node: ASTNode) -> str:
 def _children(node: ASTNode) -> list[ASTNode]:
     if isinstance(node, BinOp):
         return [node.left, node.right]
+    if isinstance(node, UnaryOp):
+        return [node.expr]
     if isinstance(node, Assign):
         return [node.value]
     if isinstance(node, PrintStmt):
@@ -224,6 +228,8 @@ def _src(node: ASTNode) -> str:
     """Rebuild a compact source string from an AST node (for card labels)."""
     if isinstance(node, BinOp):
         return f"{_src(node.left)} {node.op} {_src(node.right)}"
+    if isinstance(node, UnaryOp):
+        return f"{node.op}{_src(node.expr)}"
     if isinstance(node, Number):
         v = node.value
         return str(int(v)) if isinstance(v, float) and v == int(v) else str(v)

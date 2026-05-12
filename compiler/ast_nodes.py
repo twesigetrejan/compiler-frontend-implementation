@@ -54,6 +54,13 @@ class BinOp(ASTNode):
 
 
 @dataclass(frozen=True, slots=True)
+class UnaryOp(ASTNode):
+    """Unary arithmetic operation:  +expr or -expr"""
+    op:    str        # '+' | '-'
+    expr:  ASTNode
+
+
+@dataclass(frozen=True, slots=True)
 class Number(ASTNode):
     """Numeric literal — int or float."""
     value: int | float
@@ -103,6 +110,10 @@ def format_ast(node: ASTNode, prefix: str = "", is_last: bool = True) -> str:
         lines.append(f"{prefix}{connector}BinOp  [{node.op}]")
         lines.append(format_ast(node.left,  child_pfx, False))
         lines.append(format_ast(node.right, child_pfx, True))
+
+    elif isinstance(node, UnaryOp):
+        lines.append(f"{prefix}{connector}UnaryOp [{node.op}]")
+        lines.append(format_ast(node.expr, child_pfx, True))
 
     elif isinstance(node, Number):
         lines.append(f"{prefix}{connector}Number  {node.value}")
