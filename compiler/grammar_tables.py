@@ -16,36 +16,32 @@ from __future__ import annotations
 # 1. GRAMMAR DEFINITION
 # ══════════════════════════════════════════════════════════════
 
-# Full language grammar (display form)
+# Left-recursion-free expression grammar (display form)
 FULL_GRAMMAR = [
-    ("program",  "stmt  program   |  ε"),
-    ("stmt",     "id  '='  expr  ';'"),
-    ("stmt",     "'print'  '('  expr  ')'  ';'"),
-    ("stmt",     "expr  ';'"),
-    ("expr",     "term  expr'"),
-    ("expr'",    "'+'  term  expr'   |   '-'  term  expr'   |   ε"),
-    ("term",     "factor  term'"),
-    ("term'",    "'*'  factor  term'   |   '/'  factor  term'   |   ε"),
-    ("factor",   "'('  expr  ')'   |   id   |   num"),
+    ("E",   "T  E'"),
+    ("E'",  "'+'  T  E'   |   '-'  T  E'   |   ε"),
+    ("T",   "F  T'"),
+    ("T'",  "'*'  F  T'   |   '/'  F  T'   |   ε"),
+    ("F",   "'('  E  ')'   |   id   |   num"),
 ]
 
-# Expression sub-grammar — uses full names matching the parser code
-_NT  = ["expr", "expr'", "term", "term'", "factor"]
+# Expression sub-grammar in machine-readable form (for FIRST/FOLLOW/LL(1))
+_NT  = ["E", "E'", "T", "T'", "F"]
 _T   = ["+", "-", "*", "/", "(", ")", "id", "num", "$"]
 _SYM = set(_NT)
 
 EXPR_GRAMMAR: dict[str, list[list[str]]] = {
-    "expr":   [["term",   "expr'"]],
-    "expr'":  [["+",      "term",   "expr'"],
-               ["-",      "term",   "expr'"],
-               ["ε"]],
-    "term":   [["factor", "term'"]],
-    "term'":  [["*",      "factor", "term'"],
-               ["/",      "factor", "term'"],
-               ["ε"]],
-    "factor": [["(", "expr", ")"],
-               ["id"],
-               ["num"]],
+    "E":  [["T",  "E'"]],
+    "E'": [["+",  "T",  "E'"],
+           ["-",  "T",  "E'"],
+           ["ε"]],
+    "T":  [["F",  "T'"]],
+    "T'": [["*",  "F",  "T'"],
+           ["/",  "F",  "T'"],
+           ["ε"]],
+    "F":  [["(", "E", ")"],
+           ["id"],
+           ["num"]],
 }
 
 _EPSILON = "ε"
@@ -89,7 +85,7 @@ def compute_first(grammar: dict) -> dict[str, set[str]]:
 
 
 def compute_follow(grammar: dict, first: dict[str, set[str]],
-                   start: str = "expr") -> dict[str, set[str]]:
+                   start: str = "E") -> dict[str, set[str]]:
     """Compute FOLLOW sets for all non-terminals."""
     follow: dict[str, set[str]] = {nt: set() for nt in _NT}
     follow[start].add(_EOF)
@@ -210,17 +206,17 @@ def render_grammar_html() -> str:
 def render_first_follow_html() -> str:
     """FIRST and FOLLOW sets as an HTML table."""
     rule_rows = [
-        ("expr",   "term  expr'",      _first_str("expr"),   _FOLLOW["expr"]),
-        ("expr'",  "+ term expr'",     {"+"},                 _FOLLOW["expr'"]),
-        ("expr'",  "- term expr'",     {"-"},                 _FOLLOW["expr'"]),
-        ("expr'",  "ε",               {_EPSILON},             _FOLLOW["expr'"]),
-        ("term",   "factor  term'",   _first_str("term"),    _FOLLOW["term"]),
-        ("term'",  "* factor term'",  {"*"},                  _FOLLOW["term'"]),
-        ("term'",  "/ factor term'",  {"/"},                  _FOLLOW["term'"]),
-        ("term'",  "ε",               {_EPSILON},             _FOLLOW["term'"]),
-        ("factor", "( expr )",        {"("},                  _FOLLOW["factor"]),
-        ("factor", "id",              {"id"},                 _FOLLOW["factor"]),
-        ("factor", "num",             {"num"},                _FOLLOW["factor"]),
+        ("E",   "T  E'",          _first_str("E"),   _FOLLOW["E"]),
+        ("E'",  "+ T E'",         {"+"},              _FOLLOW["E'"]),
+        ("E'",  "- T E'",         {"-"},              _FOLLOW["E'"]),
+        ("E'",  "ε",              {_EPSILON},         _FOLLOW["E'"]),
+        ("T",   "F  T'",          _first_str("T"),   _FOLLOW["T"]),
+        ("T'",  "* F T'",         {"*"},              _FOLLOW["T'"]),
+        ("T'",  "/ F T'",         {"/"},              _FOLLOW["T'"]),
+        ("T'",  "ε",              {_EPSILON},         _FOLLOW["T'"]),
+        ("F",   "( E )",          {"("},              _FOLLOW["F"]),
+        ("F",   "id",             {"id"},             _FOLLOW["F"]),
+        ("F",   "num",            {"num"},            _FOLLOW["F"]),
     ]
 
     rows = [
