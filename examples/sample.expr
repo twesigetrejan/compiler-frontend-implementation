@@ -1,0 +1,18 @@
+// sample.expr — example programs for the front-end compiler
+// Run with:  python main.py examples/sample.expr
+
+// Arithmetic with correct precedence (* before +)
+3 + 5 * 2
+
+// Parentheses override default precedence
+(2 + 3) * 4
+
+// Variable assignment and reuse
+x = 10
+y = x + 5 * 2
+
+// print() statement
+print(y)
+
+// Left-associative subtraction:  10 - 4 - 2 = 4, NOT 8
+10 - 4 - 2
