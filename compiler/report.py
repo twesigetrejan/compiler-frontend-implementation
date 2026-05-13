@@ -339,11 +339,6 @@ def _section_html(cases: list[CaseResult], is_top_down: bool) -> str:
 <div class="theory-section">
   <h3 class="theory-title">Grammar (same productions, built bottom-up)</h3>
   {render_grammar_html()}
-  <h3 class="theory-title">Operator-Precedence Table (Shift vs. Reduce decisions)</h3>
-  <p class="theory-note">When a binary operator is on the stack and another is the lookahead,
-    the parser compares their precedence levels to decide whether to
-    <strong>Shift</strong> (push the lookahead) or <strong>Reduce</strong> (fold the stack).</p>
-  {render_precedence_table_html()}
   <h3 class="theory-title">Reduce Rules</h3>
   <p class="theory-note">These grammar productions become reduce actions when the matching
     pattern appears on the stack top.</p>

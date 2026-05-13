@@ -56,7 +56,7 @@ def _analyze_grammar(tokens: list) -> tuple[str, str]:
     
     # Simple heuristic: if operator density is high, bottom-up is better
     # because it handles operator precedence more naturally
-    if operator_density >= 0.35:
+    if operator_density >= 0.60:
         reasons.append(f"High operator density ({operator_density:.1%})")
         return "bottom-up", " + ".join(reasons)
     
@@ -64,7 +64,7 @@ def _analyze_grammar(tokens: list) -> tuple[str, str]:
     if operator_count >= 3:
         reasons.append(f"Multiple operators ({operator_count})")
         # But still prefer top-down for simplicity unless very high density
-        if operator_density >= 0.25:
+        if operator_density >= 0.20:
             return "bottom-up", " + ".join(reasons)
     
     # Default to top-down: simpler, better error messages, sufficient for LL(1)
