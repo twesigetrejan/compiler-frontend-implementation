@@ -30,6 +30,8 @@ from compiler.visualizer import _stmt_svg, _src
 class PhaseResult:
     passed: bool
     error: str = ""
+    line: int | None = None
+    column: int | None = None
 
 @dataclass
 class CaseResult:
@@ -68,11 +70,14 @@ def _run(index: int, description: str, source: str, use_bottom_up: bool) -> Case
     tokens, lex_errors = Lexer(source).tokenize()
     result.tokens = tokens
     if lex_errors:
+        err = lex_errors[0]  # Get first error
         result.ph1 = PhaseResult(passed=False,
-                                 error="\n".join(str(e) for e in lex_errors))
+                                 error="\n".join(str(e) for e in lex_errors),
+                                 line=err.line, column=err.column)
         return result
     result.ph1 = PhaseResult(passed=True)
 
+    p = None
     try:
         if use_bottom_up:
             p = BottomUpParser(tokens)
@@ -85,7 +90,9 @@ def _run(index: int, description: str, source: str, use_bottom_up: bool) -> Case
         result.ast = ast
         result.ph2 = PhaseResult(passed=True)
     except (ParseError, BottomUpParseError) as exc:
-        result.ph2 = PhaseResult(passed=False, error=str(exc))
+        result.ph2 = PhaseResult(passed=False, error=str(exc),
+                                line=getattr(exc, 'line', None),
+                                column=getattr(exc, 'column', None))
         # still capture whatever steps were recorded before the error
         if hasattr(p, 'steps'):
             result.parse_steps = p.steps
@@ -110,7 +117,9 @@ def _run(index: int, description: str, source: str, use_bottom_up: bool) -> Case
         result.eval_results  = [r for r in raw if r is not None]
         result.print_outputs = print_buf
     except SemanticError as exc:
-        result.ph3 = PhaseResult(passed=False, error=str(exc))
+        result.ph3 = PhaseResult(passed=False, error=str(exc),
+                                line=getattr(exc, 'line', None),
+                                column=getattr(exc, 'column', None))
 
     return result
 
@@ -119,6 +128,24 @@ def _run(index: int, description: str, source: str, use_bottom_up: bool) -> Case
 
 def _e(s: str) -> str:
     return _html.escape(str(s))
+
+def _format_error_with_source(error: str, source: str, line: int | None = None, column: int | None = None) -> str:
+    """Format an error message with source code context and caret."""
+    html_parts = [f'<div class="error-formatted">']
+    html_parts.append(f'<div class="error-msg-line">{_e(error)}</div>')
+    
+    if line is not None and column is not None:
+        source_lines = source.split('\n')
+        if 0 < line <= len(source_lines):
+            source_line = source_lines[line - 1]
+            caret = ' ' * (column - 1) + '^'
+            html_parts.append(
+                f'<div class="error-source-code">{_e(source_line)}</div>'
+                f'<div class="error-caret-line">{_e(caret)}</div>'
+            )
+    
+    html_parts.append('</div>')
+    return "".join(html_parts)
 
 def _badge(status: str) -> str:
     cls = {"PASS":"badge-pass","LEXER ERROR":"badge-lex",
@@ -214,7 +241,7 @@ def _case_card(cr: CaseResult) -> str:
     if cr.ph1 is None:
         ph1_body = "<p class='empty'>Phase not reached.</p>"
     elif not cr.ph1.passed:
-        ph1_body = f'<p class="err-msg">{_e(cr.ph1.error)}</p>'
+        ph1_body = _format_error_with_source(cr.ph1.error, cr.source, cr.ph1.line, cr.ph1.column)
     else:
         ph1_body = _token_table(cr.tokens)
 
@@ -225,7 +252,7 @@ def _case_card(cr: CaseResult) -> str:
         ph2_body = "<p class='empty'>Phase not reached.</p>"
     elif not cr.ph2.passed:
         ph2_body = (
-            f'<p class="err-msg">{_e(cr.ph2.error)}</p>'
+            _format_error_with_source(cr.ph2.error, cr.source, cr.ph2.line, cr.ph2.column)
             + (f'<p class="ph3-sub">Parse steps up to error:</p>'
                + _steps_html(cr.parse_steps) if cr.parse_steps else "")
         )
@@ -243,7 +270,7 @@ def _case_card(cr: CaseResult) -> str:
     if cr.ph3 is None:
         ph3_body = "<p class='empty'>Phase not reached.</p>"
     elif not cr.ph3.passed:
-        ph3_body = f'<p class="err-msg">{_e(cr.ph3.error)}</p>'
+        ph3_body = _format_error_with_source(cr.ph3.error, cr.source, cr.ph3.line, cr.ph3.column)
     else:
         ph3_body = _symbol_table_html(cr.symbol_table, cr.eval_results, cr.print_outputs)
 
@@ -451,6 +478,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 
 /* Parse steps */
 .steps-details{margin-top:10px}
+
+/* Error display with source context */
+.error-formatted{background:#fdeaea;border-left:3px solid #8a1500;padding:10px 12px;
+  margin:8px 0;border-radius:4px;font-size:13px;color:#333}
+.error-msg-line{color:#8a1500;font-weight:600;margin-bottom:8px}
+.error-source-code{background:#f5f5f5;border:1px solid #ddd;border-radius:3px;
+  padding:8px 10px;margin:6px 0;font-family:'Courier New',monospace;font-size:12px;
+  color:#333;overflow-x:auto;line-height:1.5;white-space:pre}
+.error-caret-line{color:#8a1500;font-weight:bold;font-family:'Courier New',monospace;
+  font-size:12px;margin:2px 0 0}
 .steps-details summary{font-size:13px;color:#555;cursor:pointer;padding:6px 10px;
   background:#f5f5f5;border-radius:5px;user-select:none}
 .step-list{list-style:none;padding:0;margin-top:6px;
