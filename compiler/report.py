@@ -485,7 +485,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   padding:8px 10px;margin:6px 0;font-family:'Courier New',monospace;font-size:12px;
   color:#333;overflow-x:auto;line-height:1.5;white-space:pre}
 .error-caret-line{color:#8a1500;font-weight:bold;font-family:'Courier New',monospace;
-  font-size:12px;margin:2px 0 0}
+  font-size:12px;margin:2px 0 0;white-space:pre;padding:0 10px}
 .steps-details summary{font-size:13px;color:#555;cursor:pointer;padding:6px 10px;
   background:#f5f5f5;border-radius:5px;user-select:none}
 .step-list{list-style:none;padding:0;margin-top:6px;
