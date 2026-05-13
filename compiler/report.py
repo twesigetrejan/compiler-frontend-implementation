@@ -518,12 +518,48 @@ function showTab(id, btn) {
 
 # ── Public API ────────────────────────────────────────────────
 
-def generate_report(test_cases: list[tuple[str, str]], out_path: Path) -> Path:
-    td_results = [_run(i+1, d, s, False) for i, (d, s) in enumerate(test_cases)]
-    bu_results = [_run(i+1, d, s, True)  for i, (d, s) in enumerate(test_cases)]
+def generate_report(test_cases: list[tuple[str, str]], out_path: Path, parsers: str = "both") -> Path:
+    """
+    Generate HTML report for test cases.
+    
+    Parameters:
+    -----------
+    test_cases : list of (description, source) tuples
+    out_path   : Path to write HTML to
+    parsers    : "top-down", "bottom-up", or "both" (default)
+    """
+    # Run parsers based on selection
+    if parsers in ("top-down", "both"):
+        td_results = [_run(i+1, d, s, False) for i, (d, s) in enumerate(test_cases)]
+    else:
+        td_results = None
+    
+    if parsers in ("bottom-up", "both"):
+        bu_results = [_run(i+1, d, s, True)  for i, (d, s) in enumerate(test_cases)]
+    else:
+        bu_results = None
 
-    td_html = _section_html(td_results, is_top_down=True)
-    bu_html = _section_html(bu_results, is_top_down=False)
+    # Generate tab sections only for selected parsers
+    tab_buttons = ""
+    tab_panes = ""
+    
+    if td_results is not None:
+        td_html = _section_html(td_results, is_top_down=True)
+        tab_buttons += '  <button class="tab-btn active" onclick="showTab(\'tab-td\', this)">\n'
+        tab_buttons += '    Top-Down Parser &nbsp;(Recursive Descent, LL(1))\n'
+        tab_buttons += '  </button>\n'
+        tab_panes += f'<div id="tab-td" class="tab-pane active">{td_html}</div>\n'
+    
+    if bu_results is not None:
+        bu_html = _section_html(bu_results, is_top_down=False)
+        active_class = " active" if td_results is None else ""
+        tab_buttons += '  <button class="tab-btn' + active_class + '" onclick="showTab(\'tab-bu\', this)">\n'
+        tab_buttons += '    Bottom-Up Parser &nbsp;(Shift-Reduce, Operator-Precedence)\n'
+        tab_buttons += '  </button>\n'
+        tab_panes += f'<div id="tab-bu" class="tab-pane{active_class}">{bu_html}</div>\n'
+
+    # Determine summary text
+    parser_text = "both parsers" if parsers == "both" else f"{parsers} parser"
 
     page = f"""<!DOCTYPE html>
 <html lang="en">
@@ -537,7 +573,7 @@ def generate_report(test_cases: list[tuple[str, str]], out_path: Path) -> Path:
 <div class="banner">
   <h1>Front-End Compiler &mdash; Full Report</h1>
   <div class="sub">
-    {len(test_cases)} test cases &bull; both parsers &bull;
+    {len(test_cases)} test cases &bull; {parser_text} &bull;
     all three phases &bull; grammar tables &bull; parse steps &bull; symbol table
   </div>
 </div>
@@ -550,17 +586,9 @@ def generate_report(test_cases: list[tuple[str, str]], out_path: Path) -> Path:
 </div>
 
 <div class="tab-bar">
-  <button class="tab-btn active" onclick="showTab('tab-td', this)">
-    Top-Down Parser &nbsp;(Recursive Descent, LL(1))
-  </button>
-  <button class="tab-btn" onclick="showTab('tab-bu', this)">
-    Bottom-Up Parser &nbsp;(Shift-Reduce, Operator-Precedence)
-  </button>
-</div>
+{tab_buttons}</div>
 
-<div id="tab-td" class="tab-pane active">{td_html}</div>
-<div id="tab-bu" class="tab-pane">{bu_html}</div>
-
+{tab_panes}
 <script>{_JS}</script>
 </body>
 </html>"""

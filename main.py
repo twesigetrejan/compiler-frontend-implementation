@@ -9,10 +9,13 @@
 #   # Run all built-in test cases -> saves compiler_report.html:
 #   python main.py
 #
-#   # Compile ONE expression -> saves compiler_report.html for it:
+#   # Compile ONE expression (auto-select parser):
 #   python main.py "x = 3 + 5 * 2"
 #
-#   # Same with the bottom-up (shift-reduce) parser:
+#   # Explicitly use top-down (recursive descent) parser:
+#   python main.py --top-down "x = 3 + 5 * 2"
+#
+#   # Explicitly use bottom-up (shift-reduce) parser:
 #   python main.py --bottom-up "x = 3 + 5 * 2"
 #
 #   # Both parsers side-by-side for one expression:
@@ -26,6 +29,11 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+
+# Ensure UTF-8 output on all platforms
+if sys.stdout.encoding.lower() != 'utf-8':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 from compiler.pipeline import compile_source
 from compiler.report import generate_report
@@ -61,11 +69,18 @@ TEST_CASES: list[tuple[str, str]] = [
 # Report helper
 # ─────────────────────────────────────────────────────────────
 
-def _save_report(cases: list[tuple[str, str]], label: str = "") -> None:
-    """Generate compiler_report.html for the given cases and print the path."""
+def _save_report(cases: list[tuple[str, str]], label: str = "", parsers: str = "both") -> None:
+    """Generate compiler_report.html for the given cases and print the path.
+    
+    Parameters:
+    -----------
+    cases   : list of (description, source) tuples
+    label   : optional label to print above the report path
+    parsers : "top-down", "bottom-up", or "both" (default)
+    """
     report_path = Path("compiler_report.html")
     try:
-        saved = generate_report(cases, report_path)
+        saved = generate_report(cases, report_path, parsers=parsers)
         print()
         print("=" * 64)
         if label:
@@ -82,9 +97,25 @@ def _save_report(cases: list[tuple[str, str]], label: str = "") -> None:
 # ─────────────────────────────────────────────────────────────
 
 def main(argv: list[str]) -> int:
-    use_bottom_up = "--bottom-up" in argv
-    show_both     = "--both"      in argv
+    use_top_down    = "--top-down"  in argv
+    use_bottom_up   = "--bottom-up" in argv
+    show_both       = "--both"      in argv
     args = [a for a in argv[1:] if not a.startswith("--")]
+
+    # Validate conflicting flags
+    if use_top_down and use_bottom_up:
+        print("  ERROR: Cannot specify both --top-down and --bottom-up")
+        return 1
+
+    # Determine parser selection: None=auto, True=bottom-up, False=top-down
+    if show_both:
+        parser_choice = None  # Will use auto-selection for each
+    elif use_top_down:
+        parser_choice = False
+    elif use_bottom_up:
+        parser_choice = True
+    else:
+        parser_choice = None  # Auto-select
 
     # -- Single expression or .expr file ---------------------
     if args:
@@ -107,29 +138,27 @@ def main(argv: list[str]) -> int:
                 print()
                 print("  -- " + lbl + " --")
                 compile_source(source, use_bottom_up=flag)
-            _save_report(cases, "Report for: " + repr(source) + "  (both parsers)")
+            _save_report(cases, "Report for: " + repr(source) + "  (both parsers)", parsers="both")
         else:
-            parser_label = "Bottom-Up" if use_bottom_up else "Top-Down"
+            parser_label = {False: "Top-Down", True: "Bottom-Up", None: "Auto-Selected"}[parser_choice]
             cases = [("[" + parser_label + "]  " + description, source)]
-            compile_source(source, use_bottom_up=use_bottom_up)
-            _save_report(cases, "Report for: " + repr(source) + "  (" + parser_label + " parser)")
+            actual_parser = compile_source(source, use_bottom_up=parser_choice)
+            # Convert actual parser type to the expected format for report
+            parser_param = "top-down" if actual_parser == "top-down" else "bottom-up"
+            _save_report(cases, "Report for: " + repr(source) + "  (" + parser_label + " parser)", parsers=parser_param)
 
         return 0
 
     # -- No arguments: full built-in test suite ---------------
-    for parser_flag, lbl in [
-        (False, "TOP-DOWN  (Recursive Descent, LL(1))"),
-        (True,  "BOTTOM-UP (Shift-Reduce, operator-precedence)"),
-    ]:
-        print()
-        print("*" * 64)
-        print("  PARSER MODE: " + lbl)
-        print("*" * 64)
-        for description, source in TEST_CASES:
-            print("\n  >> " + description)
-            compile_source(source, use_bottom_up=parser_flag)
+    print()
+    print("*" * 64)
+    print("  FULL TEST SUITE — AUTO-SELECTING PARSER FOR EACH CASE")
+    print("*" * 64)
+    for description, source in TEST_CASES:
+        print("\n  >> " + description)
+        compile_source(source, use_bottom_up=None)  # Auto-select
 
-    _save_report(TEST_CASES, "Full test suite -- all cases, both parsers")
+    _save_report(TEST_CASES, "Full test suite -- all cases, auto-selected parsers", parsers="both")
     return 0
 
 

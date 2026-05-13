@@ -18,9 +18,61 @@ from compiler.semantic import SemanticAnalyzer, SemanticError
 from compiler.tokens import TokenType
 
 _BAR  = "=" * 64
-_DASH = "─" * 64
+_DASH = "-" * 64
 _TICK = "  ✓"
 _CROSS= "  ✗"
+
+
+def _analyze_grammar(tokens: list) -> tuple[str, str]:
+    """
+    Analyze the token stream to determine optimal parser.
+    
+    Returns: (parser_choice, reasoning)
+    
+    Criteria:
+    - TOP-DOWN (LL(1)): Simple, LL(1)-compatible grammars. Better error messages.
+    - BOTTOM-UP (LR(1)): Complex operator precedence, high operator density.
+    """
+    # Count token types
+    non_eof = [t for t in tokens if t.type != TokenType.EOF]
+    if not non_eof:
+        return "top-down", "Empty input"
+    
+    # Count operators and operands
+    operators = {TokenType.PLUS, TokenType.MINUS, TokenType.MULTIPLY, 
+                 TokenType.DIVIDE, TokenType.LPAREN, TokenType.RPAREN}
+    operator_count = sum(1 for t in non_eof if t.type in operators)
+    operand_count = sum(1 for t in non_eof if t.type in 
+                       {TokenType.NUMBER, TokenType.IDENTIFIER})
+    
+    # Check for assignment (more complex)
+    has_assignment = any(t.type == TokenType.ASSIGN for t in non_eof)
+    
+    # Calculate metrics
+    operator_density = operator_count / len(non_eof) if non_eof else 0
+    
+    # Criteria for parser selection
+    reasons = []
+    
+    # Simple heuristic: if operator density is high, bottom-up is better
+    # because it handles operator precedence more naturally
+    if operator_density >= 0.35:
+        reasons.append(f"High operator density ({operator_density:.1%})")
+        return "bottom-up", " + ".join(reasons)
+    
+    # If has complex patterns (multiple operators), consider bottom-up
+    if operator_count >= 3:
+        reasons.append(f"Multiple operators ({operator_count})")
+        # But still prefer top-down for simplicity unless very high density
+        if operator_density >= 0.25:
+            return "bottom-up", " + ".join(reasons)
+    
+    # Default to top-down: simpler, better error messages, sufficient for LL(1)
+    reasons.append("Simple grammar (LL(1) compatible)")
+    if not has_assignment:
+        reasons.append("Primarily expression-based")
+    
+    return "top-down", " + ".join(reasons)
 
 
 def _format_error_with_context(message: str, source: str, line: int | None = None, column: int | None = None) -> str:
@@ -45,7 +97,7 @@ def _format_error_with_context(message: str, source: str, line: int | None = Non
     return error_str
 
 
-def compile_source(source: str, use_bottom_up: bool = False) -> None:
+def compile_source(source: str, use_bottom_up: bool | None = None) -> str:
     """
     Run the full front-end pipeline on `source` and print a
     phase-by-phase report.
@@ -53,9 +105,23 @@ def compile_source(source: str, use_bottom_up: bool = False) -> None:
     Parameters
     ----------
     source        : the program text to compile
-    use_bottom_up : if True, use the shift-reduce parser;
-                    if False (default), use recursive descent
+    use_bottom_up : if True, use shift-reduce parser; if False, use recursive descent.
+                    if None (default), automatically select based on grammar analysis.
+    
+    Returns
+    -------
+    str : "top-down" or "bottom-up" indicating which parser was used
     """
+    # Auto-detect parser if not specified
+    tokens_for_analysis, _ = Lexer(source).tokenize()
+    
+    if use_bottom_up is None:
+        auto_parser, reasoning = _analyze_grammar(tokens_for_analysis)
+        use_bottom_up = (auto_parser == "bottom-up")
+        selection_info = f" (auto-selected: {reasoning})"
+    else:
+        selection_info = " (explicitly specified)"
+    
     parser_name = (
         "Shift-Reduce  (bottom-up, operator-precedence)"
         if use_bottom_up else
@@ -64,7 +130,7 @@ def compile_source(source: str, use_bottom_up: bool = False) -> None:
 
     print(_BAR)
     print("  FRONT-END COMPILER")
-    print(f"  Parser : {parser_name}")
+    print(f"  Parser : {parser_name}{selection_info}")
     print(_BAR)
     print(f"  Input  : {source!r}")
     print()
@@ -90,7 +156,7 @@ def compile_source(source: str, use_bottom_up: bool = False) -> None:
         print()
         print("  Lexical errors found — compilation halted.")
         print(_BAR)
-        return
+        return "bottom-up" if use_bottom_up else "top-down"
 
     print(format_tokens(tokens))
     print()
@@ -126,7 +192,7 @@ def compile_source(source: str, use_bottom_up: bool = False) -> None:
         print()
         print("  Syntax error found — compilation halted.")
         print(_BAR)
-        return
+        return "bottom-up" if use_bottom_up else "top-down"
 
     print("  Abstract Syntax Tree:")
     print()
@@ -160,7 +226,7 @@ def compile_source(source: str, use_bottom_up: bool = False) -> None:
         print()
         print("  Semantic error found — compilation halted.")
         print(_BAR)
-        return
+        return "bottom-up" if use_bottom_up else "top-down"
 
     if analyzer.symbol_table:
         print("  Symbol table (global scope):")
@@ -178,3 +244,5 @@ def compile_source(source: str, use_bottom_up: bool = False) -> None:
     print(f"{_TICK} Semantic analysis passed.")
     print(_BAR)
     print()
+    
+    return "bottom-up" if use_bottom_up else "top-down"
