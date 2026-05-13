@@ -41,6 +41,7 @@ class BottomUpParser:
             self._shift()
             self._reduce_all(self._lookahead())
         self._reduce_all(self._eof_token())
+        self._check_incomplete_expression()
         stmts: list[ASTNode] = []
         for sym in self.stack:
             if sym.kind in ("STMT", "EXPR"):
@@ -48,12 +49,43 @@ class BottomUpParser:
             else:
                 tok = sym.token
                 raise BottomUpParseError(
-                    f"[Parser Error] Could not reduce {sym.kind!r} "
-                    f"near {tok.value!r} at line {tok.line}, column {tok.column}",
+                    f"[Parser Error] Unexpected token {tok.value!r} "
+                    f"at line {tok.line}, column {tok.column}",
                     tok.line, tok.column,
                 )
         self.steps.append("Accept -- stack fully reduced")
         return Program(tuple(stmts))
+
+    _BINARY_OP_KINDS = frozenset({"PLUS", "MINUS", "MULTIPLY", "DIVIDE"})
+
+    def _check_incomplete_expression(self) -> None:
+        if not self.stack:
+            return
+        top = self.stack[-1]
+        # Trailing binary operator: EXPR + <nothing> or x = 2 + <nothing>
+        if top.kind in self._BINARY_OP_KINDS:
+            tok = top.token
+            raise BottomUpParseError(
+                f"[Parser Error] Unexpected end of input after '{tok.value}': "
+                f"missing right-hand operand at line {tok.line}, column {tok.column}",
+                tok.line, tok.column,
+            )
+        # Trailing ASSIGN with no expression: y = <nothing>
+        if top.kind == "ASSIGN":
+            tok = top.token
+            raise BottomUpParseError(
+                f"[Parser Error] Unexpected end of input after '=': "
+                f"missing right-hand expression at line {tok.line}, column {tok.column}",
+                tok.line, tok.column,
+            )
+        # Unclosed parenthesis: LPAREN still on stack
+        for sym in self.stack:
+            if sym.kind == "LPAREN":
+                tok = sym.token
+                raise BottomUpParseError(
+                    f"[Parser Error] Unclosed '(' at line {tok.line}, column {tok.column}",
+                    tok.line, tok.column,
+                )
 
     def _shift(self) -> None:
         tok = self.tokens[self.index]

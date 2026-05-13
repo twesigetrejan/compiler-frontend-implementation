@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 import html as _html
+import re as _re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -131,6 +132,8 @@ def _e(s: str) -> str:
 
 def _format_error_with_source(error: str, source: str, line: int | None = None, column: int | None = None) -> str:
     """Format an error message with source code context and caret."""
+    # Strip trailing "at line X, column Y" — the caret already shows the position visually.
+    error = _re.sub(r'\s+at line \d+, column \d+\.?$', '', error).rstrip()
     html_parts = [f'<div class="error-formatted">']
     html_parts.append(f'<div class="error-msg-line">{_e(error)}</div>')
     
