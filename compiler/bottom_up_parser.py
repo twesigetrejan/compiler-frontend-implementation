@@ -42,11 +42,37 @@ class BottomUpParser:
             self._reduce_all(self._lookahead())
         self._reduce_all(self._eof_token())
         stmts: list[ASTNode] = []
+        
+        # Check for structural errors first
+        for sym in self.stack:
+            if sym.kind == "LPAREN":
+                raise BottomUpParseError(
+                    f"[Parser Error] Unclosed parenthesis '(' "
+                    f"at line {sym.token.line}, column {sym.token.column}",
+                    sym.token.line, sym.token.column,
+                )
+            if sym.kind == "RPAREN":
+                raise BottomUpParseError(
+                    f"[Parser Error] Unexpected ')' "
+                    f"at line {sym.token.line}, column {sym.token.column}",
+                    sym.token.line, sym.token.column,
+                )
+        
         for sym in self.stack:
             if sym.kind in ("STMT", "EXPR"):
                 stmts.append(sym.value)
             else:
                 tok = sym.token
+                
+                # Consecutive operators: an operator on the stack that couldn't be reduced
+                if tok.type in _BINARY_OPS:
+                    raise BottomUpParseError(
+                        f"[Parser Error] Unexpected operator '{tok.value}' "
+                        f"at line {tok.line}, column {tok.column} — "
+                        f"expected operand after operator",
+                        tok.line, tok.column,
+                    )
+                
                 raise BottomUpParseError(
                     f"[Parser Error] Could not reduce {sym.kind!r} "
                     f"near {tok.value!r} at line {tok.line}, column {tok.column}",
