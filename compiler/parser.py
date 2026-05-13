@@ -10,7 +10,7 @@
 # call hierarchy — lower-precedence rules call higher-precedence
 # ones, so higher-precedence operators bind tighter naturally.
 #
-# Grammar
+# Grammar (updated to support implicit multiplication)
 # ───────
 #   program    →  statement* EOF
 #   statement  →  assignment
@@ -19,10 +19,12 @@
 #   assignment →  IDENTIFIER '=' expr (';')?
 #   print_stmt →  PRINT '(' expr ')' (';')?
 #   expr       →  term ( ('+' | '-') term )*       ← lowest precedence
-#   term       →  factor ( ('*' | '/') factor )*   ← medium precedence
+#   term       →  factor ( (('*' | '/') | ε) factor )*   ← medium precedence (juxtaposition = implicit *)
 #   factor     →  NUMBER                            ← highest / atoms
 #              |  IDENTIFIER
 #              |  '(' expr ')'
+#
+# Implicit multiplication: `2(3)` is treated as `2 * (3)`, and `x y` as `x * y`
 #
 # Each grammar rule is one method; reading the methods in order
 # IS reading the grammar.
@@ -80,6 +82,10 @@ class Parser:
 
     def _check(self, *types: TokenType) -> bool:
         return self._current().type in types
+
+    def _can_start_factor(self) -> bool:
+        """Check if current token can start a factor (used for implicit multiplication)."""
+        return self._check(TokenType.NUMBER, TokenType.IDENTIFIER, TokenType.LPAREN)
 
     def _match(self, *types: TokenType) -> bool:
         if self._check(*types):
@@ -182,17 +188,35 @@ class Parser:
         return node
 
     def _term(self) -> ASTNode:
-        """term → factor ( ('*' | '/') factor )*   [medium precedence]"""
+        """term → factor ( (('*' | '/') | ε) factor )*   [medium precedence]
+        
+        Supports both explicit operators (*, /) and implicit multiplication via juxtaposition.
+        Examples: 2*3, 2/3, 2(3) [implicit], x y [implicit], (2+3)(4+5) [implicit]
+        """
         self._trace("  Apply  term → factor term'")
         node = self._factor()
-        while self._check(TokenType.MULTIPLY, TokenType.DIVIDE):
-            op_tok = self._advance()            # '*' or '/'
-            op = op_tok.value
-            self.steps.append(f"  term': Match op '{op}'  → term' → '{op}' factor term'")
-            right = self._factor()
-            node  = BinOp(node, op, right, line=op_tok.line, column=op_tok.column)           # left-associative
-            self.steps.append(f"  Reduce  EXPR '{op}' EXPR  →  BinOp[{op}]")
-        self.steps.append("  term' → ε  (no more * or /)")
+        
+        while True:
+            if self._check(TokenType.MULTIPLY, TokenType.DIVIDE):
+                # Explicit multiplication or division operator
+                op_tok = self._advance()            # '*' or '/'
+                op = op_tok.value
+                self.steps.append(f"  term': Match op '{op}'  → term' → '{op}' factor term'")
+                right = self._factor()
+                node  = BinOp(node, op, right, line=op_tok.line, column=op_tok.column)           # left-associative
+                self.steps.append(f"  Reduce  EXPR '{op}' EXPR  →  BinOp[{op}]")
+            elif self._can_start_factor():
+                # Implicit multiplication: juxtaposition (e.g., 2(3) or x y)
+                implicit_tok = self._current()
+                self.steps.append(f"  term': Implicit multiplication detected")
+                right = self._factor()
+                node  = BinOp(node, '*', right, line=implicit_tok.line, column=implicit_tok.column)
+                self.steps.append(f"  Reduce  EXPR (implicit) EXPR  →  BinOp[*]")
+            else:
+                # No more factors
+                self.steps.append("  term' → ε  (no more factors)")
+                break
+        
         return node
 
     def _factor(self) -> ASTNode:

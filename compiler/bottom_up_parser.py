@@ -83,6 +83,7 @@ class BottomUpParser:
             or self._reduce_identifier(lookahead)
             or self._reduce_print()
             or self._reduce_parenthesised()
+            or self._reduce_implicit_mult(lookahead)
             or self._reduce_binary(lookahead)
             or self._reduce_assignment(lookahead)
             or self._reduce_trailing_semicolon()
@@ -132,6 +133,54 @@ class BottomUpParser:
         self._log_reduce("LPAREN EXPR RPAREN", "EXPR  (grouped)")
         return True
 
+    def _reduce_implicit_mult(self, lookahead: Token) -> bool:
+        """Reduce implicit multiplication: EXPR EXPR -> EXPR * EXPR, or NUMBER EXPR -> EXPR * EXPR, etc.
+        
+        Examples: 2(3), x y, (2+3)(4+5), (2 3), 2 x, etc.
+        Only applies when lookahead is NOT an operator that could come between them.
+        """
+        if len(self.stack) < 2:
+            return False
+        
+        right_sym = self.stack[-1]
+        left_sym  = self.stack[-2]
+        
+        # Check if right side is an expression
+        is_right_expr = right_sym.kind == "EXPR"
+        
+        # Check if left side is an expression or something that can be multiplied
+        # (NUMBER or IDENTIFIER that haven't been reduced yet, but are valid operands)
+        is_left_expr = left_sym.kind in ("EXPR", "NUMBER", "IDENTIFIER")
+        
+        if not (is_left_expr and is_right_expr):
+            return False
+        
+        # Don't reduce if lookahead is a binary operator (handled by _reduce_binary)
+        if lookahead.type in _BINARY_OPS:
+            return False
+        
+        # Don't reduce if lookahead is assignment or semicolon
+        if lookahead.type in (TokenType.ASSIGN, TokenType.SEMICOLON):
+            return False
+        
+        # First, reduce left side if it's NUMBER or IDENTIFIER
+        left_val = left_sym.value
+        if left_sym.kind == "NUMBER":
+            raw = left_sym.token.value
+            left_val = float(raw) if "." in raw else int(raw)
+            left_val = Number(left_val, line=left_sym.token.line, column=left_sym.token.column)
+        elif left_sym.kind == "IDENTIFIER":
+            left_val = Identifier(left_sym.token.value, line=left_sym.token.line, column=left_sym.token.column)
+        
+        # Create implicit multiplication node
+        self.stack[-2:] = [Symbol(
+            "EXPR",
+            BinOp(left_val, '*', right_sym.value, line=left_sym.token.line, column=left_sym.token.column),
+            left_sym.token,
+        )]
+        self._log_reduce("(NUMBER|IDENTIFIER|EXPR) EXPR", "BinOp[*]  (implicit multiplication)")
+        return True
+
     def _reduce_binary(self, lookahead: Token) -> bool:
         if len(self.stack) < 3:
             return False
@@ -156,6 +205,10 @@ class BottomUpParser:
 
     def _reduce_assignment(self, lookahead: Token) -> bool:
         if lookahead.type in _BINARY_OPS:
+            return False
+        # Don't reduce if lookahead could indicate implicit multiplication
+        # (NUMBER, IDENTIFIER, or LPAREN can all start a new factor for implicit mult)
+        if lookahead.type in (TokenType.LPAREN, TokenType.NUMBER, TokenType.IDENTIFIER):
             return False
         if self._suffix_is("IDENTIFIER", "ASSIGN", "EXPR", "SEMICOLON"):
             _sc, expr, _eq, name = (self.stack.pop() for _ in range(4))
