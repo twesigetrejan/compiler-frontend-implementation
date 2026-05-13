@@ -23,6 +23,28 @@ _TICK = "  ✓"
 _CROSS= "  ✗"
 
 
+def _format_error_with_context(message: str, source: str, line: int | None = None, column: int | None = None) -> str:
+    """Format an error message with source context (line, column, and source snippet)."""
+    # Remove position info from message if it's already there
+    import re
+    message_clean = re.sub(r'\s+at line \d+, column \d+$', '', message)
+    error_str = message_clean
+    
+    if line is not None and column is not None:
+        error_str += f" at line {line}, column {column}"
+        
+        # Extract the source line
+        source_lines = source.split('\n')
+        if 0 < line <= len(source_lines):
+            source_line = source_lines[line - 1]
+            # Add the source line and a caret pointing to the error
+            error_str += f"\n    {source_line}\n    {' ' * (column - 1)}^"
+    elif line is not None:
+        error_str += f" at line {line}"
+    
+    return error_str
+
+
 def compile_source(source: str, use_bottom_up: bool = False) -> None:
     """
     Run the full front-end pipeline on `source` and print a
@@ -63,7 +85,8 @@ def compile_source(source: str, use_bottom_up: bool = False) -> None:
 
     if lex_errors:
         for err in lex_errors:
-            print(f"{_CROSS} {err}")
+            formatted = _format_error_with_context(str(err), source, err.line, err.column)
+            print(f"{_CROSS} {formatted}")
         print()
         print("  Lexical errors found — compilation halted.")
         print(_BAR)
@@ -98,7 +121,8 @@ def compile_source(source: str, use_bottom_up: bool = False) -> None:
         else:
             ast = Parser(tokens).parse()
     except (ParseError, BottomUpParseError) as err:
-        print(f"{_CROSS} {err}")
+        formatted = _format_error_with_context(str(err), source, err.line, err.column)
+        print(f"{_CROSS} {formatted}")
         print()
         print("  Syntax error found — compilation halted.")
         print(_BAR)
@@ -126,7 +150,13 @@ def compile_source(source: str, use_bottom_up: bool = False) -> None:
         analyzer = SemanticAnalyzer()
         results  = analyzer.analyze(ast)
     except SemanticError as err:
-        print(f"{_CROSS} {err}")
+        # For semantic errors, include position info if available
+        if hasattr(err, 'line') and err.line is not None:
+            formatted = _format_error_with_context(str(err), source, err.line, err.column)
+        else:
+            # No position info available, show source for context
+            formatted = f"{err}\n\n    Source: {source}"
+        print(f"{_CROSS} {formatted}")
         print()
         print("  Semantic error found — compilation halted.")
         print(_BAR)

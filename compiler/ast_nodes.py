@@ -30,6 +30,8 @@ class ASTNode:
 class Program(ASTNode):
     """Root node — holds every top-level statement."""
     statements: tuple[ASTNode, ...]
+    line: int | None = None
+    column: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,12 +39,16 @@ class Assign(ASTNode):
     """Variable assignment:  name = value"""
     name:  str
     value: ASTNode
+    line: int | None = None
+    column: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class PrintStmt(ASTNode):
     """print(expr) statement — integrated from reference impl."""
     expression: ASTNode
+    line: int | None = None
+    column: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,18 +57,24 @@ class BinOp(ASTNode):
     left:  ASTNode
     op:    str        # '+' | '-' | '*' | '/'
     right: ASTNode
+    line: int | None = None
+    column: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class Number(ASTNode):
     """Numeric literal — int or float."""
     value: int | float
+    line: int | None = None
+    column: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class Identifier(ASTNode):
     """Variable reference."""
     name: str
+    line: int | None = None
+    column: int | None = None
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -95,7 +95,7 @@ class BottomUpParser:
         sym = self.stack.pop()
         raw = sym.token.value
         val = float(raw) if "." in raw else int(raw)
-        self.stack.append(Symbol("EXPR", Number(val), sym.token))
+        self.stack.append(Symbol("EXPR", Number(val, line=sym.token.line, column=sym.token.column), sym.token))
         self._log_reduce(f"NUMBER('{raw}')", f"EXPR({val})")
         return True
 
@@ -105,19 +105,19 @@ class BottomUpParser:
         if lookahead.type == TokenType.ASSIGN:
             return False
         sym = self.stack.pop()
-        self.stack.append(Symbol("EXPR", Identifier(sym.token.value), sym.token))
+        self.stack.append(Symbol("EXPR", Identifier(sym.token.value, line=sym.token.line, column=sym.token.column), sym.token))
         self._log_reduce(f"IDENTIFIER('{sym.token.value}')", f"EXPR(id={sym.token.value})")
         return True
 
     def _reduce_print(self) -> bool:
         if self._suffix_is("PRINT", "LPAREN", "EXPR", "RPAREN", "SEMICOLON"):
             _sc, _rp, expr, _lp, kw = (self.stack.pop() for _ in range(5))
-            self.stack.append(Symbol("STMT", PrintStmt(expr.value), kw.token))
+            self.stack.append(Symbol("STMT", PrintStmt(expr.value, line=kw.token.line, column=kw.token.column), kw.token))
             self._log_reduce("PRINT LPAREN EXPR RPAREN SEMICOLON", "STMT(print)")
             return True
         if self._suffix_is("PRINT", "LPAREN", "EXPR", "RPAREN"):
             _rp, expr, _lp, kw = (self.stack.pop() for _ in range(4))
-            self.stack.append(Symbol("STMT", PrintStmt(expr.value), kw.token))
+            self.stack.append(Symbol("STMT", PrintStmt(expr.value, line=kw.token.line, column=kw.token.column), kw.token))
             self._log_reduce("PRINT LPAREN EXPR RPAREN", "STMT(print)")
             return True
         return False
@@ -148,7 +148,7 @@ class BottomUpParser:
         op_val = op_sym.token.value
         self.stack[-3:] = [Symbol(
             "EXPR",
-            BinOp(left_sym.value, op_val, right_sym.value),
+            BinOp(left_sym.value, op_val, right_sym.value, line=op_sym.token.line, column=op_sym.token.column),
             left_sym.token,
         )]
         self._log_reduce(f"EXPR '{op_val}' EXPR", f"BinOp[{op_val}]")
@@ -159,7 +159,7 @@ class BottomUpParser:
             return False
         if self._suffix_is("IDENTIFIER", "ASSIGN", "EXPR", "SEMICOLON"):
             _sc, expr, _eq, name = (self.stack.pop() for _ in range(4))
-            self.stack.append(Symbol("STMT", Assign(name.token.value, expr.value), name.token))
+            self.stack.append(Symbol("STMT", Assign(name.token.value, expr.value, line=name.token.line, column=name.token.column), name.token))
             self._log_reduce(
                 f"IDENTIFIER('{name.token.value}') ASSIGN EXPR SEMICOLON",
                 f"STMT(assign {name.token.value})"
@@ -167,7 +167,7 @@ class BottomUpParser:
             return True
         if self._suffix_is("IDENTIFIER", "ASSIGN", "EXPR"):
             expr, _eq, name = (self.stack.pop() for _ in range(3))
-            self.stack.append(Symbol("STMT", Assign(name.token.value, expr.value), name.token))
+            self.stack.append(Symbol("STMT", Assign(name.token.value, expr.value, line=name.token.line, column=name.token.column), name.token))
             self._log_reduce(
                 f"IDENTIFIER('{name.token.value}') ASSIGN EXPR",
                 f"STMT(assign {name.token.value})"

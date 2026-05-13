@@ -116,7 +116,7 @@ class Parser:
             step += 1
         self._consume(TokenType.EOF, "Expected end of input")
         self.steps.append("✓  Accept — input fully consumed")
-        return Program(tuple(stmts))
+        return Program(tuple(stmts), line=None, column=None)
 
     def _statement(self) -> ASTNode:
         """
@@ -151,11 +151,11 @@ class Parser:
         value    = self._expr()
         self._match(TokenType.SEMICOLON)
         self.steps.append(f"  Assign '{name_tok.value}' = <expr>  ✓")
-        return Assign(name_tok.value, value)
+        return Assign(name_tok.value, value, line=name_tok.line, column=name_tok.column)
 
     def _print_stmt(self) -> PrintStmt:
         """print_stmt → PRINT '(' expr ')' (';')?"""
-        self._advance()                                         # consume 'print'
+        print_tok = self._advance()                                         # consume 'print'
         self.steps.append("  Match  'print'")
         self._consume(TokenType.LPAREN, "Expected '(' after 'print'")
         self.steps.append("  Match  '('")
@@ -165,17 +165,18 @@ class Parser:
         self.steps.append("  Match  ')'")
         self._match(TokenType.SEMICOLON)
         self.steps.append("  PrintStmt built  ✓")
-        return PrintStmt(expr)
+        return PrintStmt(expr, line=print_tok.line, column=print_tok.column)
 
     def _expr(self) -> ASTNode:
         """expr → term ( ('+' | '-') term )*   [lowest precedence]"""
         self._trace("  Apply  expr → term expr'")
         node = self._term()
         while self._check(TokenType.PLUS, TokenType.MINUS):
-            op    = self._advance().value            # '+' or '-'
+            op_tok = self._advance()            # '+' or '-'
+            op = op_tok.value
             self.steps.append(f"  expr': Match op '{op}'  → expr' → '{op}' term expr'")
             right = self._term()
-            node  = BinOp(node, op, right)           # left-associative
+            node  = BinOp(node, op, right, line=op_tok.line, column=op_tok.column)           # left-associative
             self.steps.append(f"  Reduce  EXPR '{op}' EXPR  →  BinOp[{op}]")
         self.steps.append("  expr' → ε  (no more + or -)")
         return node
@@ -185,10 +186,11 @@ class Parser:
         self._trace("  Apply  term → factor term'")
         node = self._factor()
         while self._check(TokenType.MULTIPLY, TokenType.DIVIDE):
-            op    = self._advance().value            # '*' or '/'
+            op_tok = self._advance()            # '*' or '/'
+            op = op_tok.value
             self.steps.append(f"  term': Match op '{op}'  → term' → '{op}' factor term'")
             right = self._factor()
-            node  = BinOp(node, op, right)           # left-associative
+            node  = BinOp(node, op, right, line=op_tok.line, column=op_tok.column)           # left-associative
             self.steps.append(f"  Reduce  EXPR '{op}' EXPR  →  BinOp[{op}]")
         self.steps.append("  term' → ε  (no more * or /)")
         return node
@@ -201,12 +203,12 @@ class Parser:
             self._advance()
             val = float(tok.value) if "." in tok.value else int(tok.value)
             self.steps.append(f"  factor → num  Match '{tok.value}'")
-            return Number(val)
+            return Number(val, line=tok.line, column=tok.column)
 
         if tok.type == TokenType.IDENTIFIER:
             self._advance()
             self.steps.append(f"  factor → id   Match '{tok.value}'")
-            return Identifier(tok.value)
+            return Identifier(tok.value, line=tok.line, column=tok.column)
 
         if tok.type == TokenType.LPAREN:
             self._advance()                 # consume '('

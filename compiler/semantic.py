@@ -41,6 +41,10 @@ from compiler.parser import Parser
 
 class SemanticError(ValueError):
     """Raised when the AST violates a semantic rule."""
+    def __init__(self, message: str, line: int | None = None, column: int | None = None) -> None:
+        super().__init__(message)
+        self.line   = line
+        self.column = column
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -74,7 +78,7 @@ class SemanticAnalyzer:
         """Store a name in the current (innermost) scope."""
         self.scopes[-1][name] = value
 
-    def _resolve(self, name: str) -> int | float:
+    def _resolve(self, name: str, line: int | None = None, column: int | None = None) -> int | float:
         """
         Walk scopes from innermost outward — same search order as
         the reference implementation — and return the value if found.
@@ -84,7 +88,8 @@ class SemanticAnalyzer:
             if name in scope:
                 return scope[name]
         raise SemanticError(
-            f"[Semantic Error] Undefined variable '{name}'"
+            f"[Semantic Error] Undefined variable '{name}'",
+            line, column
         )
 
     @property
@@ -122,17 +127,22 @@ class SemanticAnalyzer:
             if not isinstance(left, (int, float)):
                 raise SemanticError(
                     f"[Semantic Error] Left operand of '{node.op}' "
-                    f"is not numeric: {left!r}"
+                    f"is not numeric: {left!r}",
+                    node.line, node.column
                 )
             if not isinstance(right, (int, float)):
                 raise SemanticError(
                     f"[Semantic Error] Right operand of '{node.op}' "
-                    f"is not numeric: {right!r}"
+                    f"is not numeric: {right!r}",
+                    node.line, node.column
                 )
 
             # Division by zero
             if node.op == "/" and right == 0:
-                raise SemanticError("[Semantic Error] Division by zero")
+                raise SemanticError(
+                    "[Semantic Error] Division by zero",
+                    node.line, node.column
+                )
 
             return {
                 "+": lambda a, b: a + b,
@@ -145,7 +155,7 @@ class SemanticAnalyzer:
             return node.value
 
         if isinstance(node, Identifier):
-            return self._resolve(node.name)
+            return self._resolve(node.name, node.line, node.column)
 
         raise SemanticError(
             f"[Semantic Error] Unknown AST node type: {type(node).__name__!r}"
